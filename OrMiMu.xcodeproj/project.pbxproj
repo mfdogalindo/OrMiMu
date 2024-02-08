@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		637A9FC92B7511360080D742 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637A9FC82B7511360080D742 /* Constants.swift */; };
+		637A9FCC2B75BA310080D742 /* SongModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637A9FCB2B75BA310080D742 /* SongModels.swift */; };
 		645F89AA2B744341000F99F0 /* OrMiMuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89A92B744341000F99F0 /* OrMiMuApp.swift */; };
 		645F89AC2B744341000F99F0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89AB2B744341000F99F0 /* ContentView.swift */; };
 		645F89AE2B744341000F99F0 /* Item.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89AD2B744341000F99F0 /* Item.swift */; };
@@ -15,6 +17,9 @@
 		645F89BE2B744347000F99F0 /* OrMiMuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89BD2B744347000F99F0 /* OrMiMuTests.swift */; };
 		645F89C82B744347000F99F0 /* OrMiMuUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89C72B744347000F99F0 /* OrMiMuUITests.swift */; };
 		645F89CA2B744347000F99F0 /* OrMiMuUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89C92B744347000F99F0 /* OrMiMuUITestsLaunchTests.swift */; };
+		645F89D92B74470C000F99F0 /* AddFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89D82B74470C000F99F0 /* AddFolder.swift */; };
+		645F89DC2B744E89000F99F0 /* FilesModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89DB2B744E89000F99F0 /* FilesModels.swift */; };
+		645F89DF2B745A83000F99F0 /* MusicList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89DE2B745A83000F99F0 /* MusicList.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,6 +40,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		637A9FC82B7511360080D742 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		637A9FCA2B752B330080D742 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		637A9FCB2B75BA310080D742 /* SongModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongModels.swift; sourceTree = "<group>"; };
 		645F89A62B744341000F99F0 /* OrMiMu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OrMiMu.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		645F89A92B744341000F99F0 /* OrMiMuApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrMiMuApp.swift; sourceTree = "<group>"; };
 		645F89AB2B744341000F99F0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -47,6 +55,9 @@
 		645F89C32B744347000F99F0 /* OrMiMuUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrMiMuUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		645F89C72B744347000F99F0 /* OrMiMuUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrMiMuUITests.swift; sourceTree = "<group>"; };
 		645F89C92B744347000F99F0 /* OrMiMuUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrMiMuUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		645F89D82B74470C000F99F0 /* AddFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFolder.swift; sourceTree = "<group>"; };
+		645F89DB2B744E89000F99F0 /* FilesModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesModels.swift; sourceTree = "<group>"; };
+		645F89DE2B745A83000F99F0 /* MusicList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicList.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,6 +108,10 @@
 		645F89A82B744341000F99F0 /* OrMiMu */ = {
 			isa = PBXGroup;
 			children = (
+				637A9FCA2B752B330080D742 /* Info.plist */,
+				645F89DD2B745A5B000F99F0 /* Views */,
+				645F89DA2B744E37000F99F0 /* Models */,
+				645F89D72B7446E5000F99F0 /* Actions */,
 				645F89A92B744341000F99F0 /* OrMiMuApp.swift */,
 				645F89AB2B744341000F99F0 /* ContentView.swift */,
 				645F89AD2B744341000F99F0 /* Item.swift */,
@@ -130,6 +145,32 @@
 				645F89C92B744347000F99F0 /* OrMiMuUITestsLaunchTests.swift */,
 			);
 			path = OrMiMuUITests;
+			sourceTree = "<group>";
+		};
+		645F89D72B7446E5000F99F0 /* Actions */ = {
+			isa = PBXGroup;
+			children = (
+				645F89D82B74470C000F99F0 /* AddFolder.swift */,
+			);
+			path = Actions;
+			sourceTree = "<group>";
+		};
+		645F89DA2B744E37000F99F0 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				645F89DB2B744E89000F99F0 /* FilesModels.swift */,
+				637A9FC82B7511360080D742 /* Constants.swift */,
+				637A9FCB2B75BA310080D742 /* SongModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		645F89DD2B745A5B000F99F0 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				645F89DE2B745A83000F99F0 /* MusicList.swift */,
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -265,6 +306,11 @@
 				645F89AC2B744341000F99F0 /* ContentView.swift in Sources */,
 				645F89AE2B744341000F99F0 /* Item.swift in Sources */,
 				645F89AA2B744341000F99F0 /* OrMiMuApp.swift in Sources */,
+				645F89DF2B745A83000F99F0 /* MusicList.swift in Sources */,
+				637A9FC92B7511360080D742 /* Constants.swift in Sources */,
+				645F89D92B74470C000F99F0 /* AddFolder.swift in Sources */,
+				637A9FCC2B75BA310080D742 /* SongModels.swift in Sources */,
+				645F89DC2B744E89000F99F0 /* FilesModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -338,7 +384,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -401,7 +447,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -429,8 +475,10 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"OrMiMu/Preview Content\"";
-				ENABLE_PREVIEWS = YES;
+				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = OrMiMu/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -455,8 +503,10 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"OrMiMu/Preview Content\"";
-				ENABLE_PREVIEWS = YES;
+				ENABLE_PREVIEWS = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = OrMiMu/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

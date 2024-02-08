@@ -10,9 +10,9 @@ import SwiftData
 
 @Model
 final class Item {
-    var timestamp: Date
+    var folderName: String
     
-    init(timestamp: Date) {
-        self.timestamp = timestamp
+    init(folderName: String) {
+        self.folderName = folderName
     }
 }
