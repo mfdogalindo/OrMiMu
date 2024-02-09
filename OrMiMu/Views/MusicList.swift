@@ -11,14 +11,23 @@ import AVFoundation
 
 struct MusicListView: View {
     let paths: [MusicPath]
-    @Binding var selected : MusicPath.ID?;
+    @Binding var selected : MusicPath.ID?
+    @Binding var playableSong: URL?
     @State var tableData: [Song] = []
 
     var body: some View{
         if let selectedPath = paths.first(where: {$0.id == selected}){
             Table(tableData){
                 TableColumn("Path", value:  \.path)
-                TableColumn("Archivo", value: \.name)
+                TableColumn("Archivo") { file in
+                    HStack{
+                        Text(file.name)
+                        Spacer()
+                    }
+                    .onTapGesture{
+                        playableSong = file.url
+                    }
+                }
                 TableColumn("Title", value: \.tags.title)
                 TableColumn("Artist", value: \.tags.artist)
                 TableColumn("Genre", value: \.tags.genre)
@@ -68,7 +77,7 @@ struct MusicListView: View {
             let filePath = folder.path+"/"+file
             let url = URL(fileURLWithPath: filePath)
             let tags: Tags = await getID3Tag(url: url)
-            result.append(Song(name: file, path: filePath, tags: tags))
+            result.append(Song(name: file, path: filePath, tags: tags, url: url))
         }
         return result
     }

@@ -12,6 +12,7 @@ struct Song: Identifiable {
     let name: String
     let path: String
     let tags: Tags
+    let url: URL
 }
 
 struct Tags {

@@ -7,11 +7,13 @@
 
 import SwiftUI
 import SwiftData
+import AVFoundation
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var items: [MusicPath]
-    @State private var selected: MusicPath.ID?;
+    @State private var selected: MusicPath.ID?
+    @State private var playableSong: URL? = nil
 
     private var addFolder: AddFolder = AddFolder.init();
     
@@ -21,28 +23,29 @@ struct ContentView: View {
                 Text(item.name)
                     .contextMenu { self.contextMenuFolderView(path: item) }
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 250)
             .toolbar {
                 ToolbarItem {
-                    Button(action: addItem) {
+                    Button(action: addFolders) {
                         Label("Add Item", systemImage: "plus")
                     }
                 }
             }
         } detail: {
-            MusicListView(paths: items, selected: $selected).id(selected)
+            DetailView()
         }
     }
-
-    private func addItem() {
-        withAnimation {
-            let folder = addFolder.selectFolder();
-            if(folder != nil){
-                print(folder?.mp3Files as Any)
-                modelContext.insert(folder!);
+    
+    private func DetailView() -> some View {
+        VStack{
+            MusicListView(paths: items, selected: $selected, playableSong: $playableSong)
+                .id(selected)
+            if(playableSong != nil){
+                MusicPlayer(playableSong: $playableSong).id(playableSong)
             }
         }
     }
+
     
     private func contextMenuFolderView(path: MusicPath) -> some View {
         VStack {
@@ -61,12 +64,14 @@ struct ContentView: View {
             }
         }
     }
-    
 
-    private func deleteItems(offsets: IndexSet) {
+
+    private func addFolders() {
         withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+            let folder = addFolder.selectFolder();
+            if(folder != nil){
+                print(folder?.mp3Files as Any)
+                modelContext.insert(folder!);
             }
         }
     }
