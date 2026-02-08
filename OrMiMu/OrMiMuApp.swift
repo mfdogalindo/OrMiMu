@@ -30,5 +30,9 @@ struct OrMiMuApp: App {
             ContentView()
         }
         .modelContainer(sharedModelContainer)
+
+        Settings {
+            SettingsView()
+        }
     }
 }

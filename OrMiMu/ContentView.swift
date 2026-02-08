@@ -331,12 +331,21 @@ struct YouTubeDownloadView: View {
     @State private var isInstallingDependencies = false
     @State private var dependenciesInstalled = false
 
+    // Preferences with local override support
+    @AppStorage("downloadFormat") private var defaultFormat: String = "mp3"
+    @AppStorage("downloadBitrate") private var defaultBitrate: String = "256"
+    @State private var selectedFormat: String = "mp3"
+    @State private var selectedBitrate: String = "256"
+
+    let formats = ["mp3", "m4a", "flac", "wav"]
+    let bitrates = ["128", "192", "256", "320"]
+
     var body: some View {
         Form {
             if !dependenciesInstalled {
                 Section("Dependencies") {
                     if isInstallingDependencies {
-                        ProgressView("Installing components...")
+                        ProgressView("Installing components (yt-dlp & ffmpeg)...")
                     } else {
                         Button("Install Dependencies") {
                             installDependencies()
@@ -347,6 +356,24 @@ struct YouTubeDownloadView: View {
 
             Section("Video URL") {
                 TextField("https://...", text: $urlString)
+            }
+
+            Section("Settings") {
+                Picker("Format", selection: $selectedFormat) {
+                    ForEach(formats, id: \.self) { format in
+                        Text(format.uppercased()).tag(format)
+                    }
+                }
+                .pickerStyle(MenuPickerStyle())
+
+                if selectedFormat == "mp3" || selectedFormat == "m4a" {
+                    Picker("Bitrate (kbps)", selection: $selectedBitrate) {
+                        ForEach(bitrates, id: \.self) { bitrate in
+                            Text(bitrate).tag(bitrate)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
             }
 
             Section("Metadata Override (Optional)") {
@@ -369,6 +396,9 @@ struct YouTubeDownloadView: View {
         //.navigationTitle("YouTube Download") // Not needed in main content area
         .onAppear {
             checkDependencies()
+            // Initialize with defaults if needed, or rely on state init
+            selectedFormat = defaultFormat
+            selectedBitrate = defaultBitrate
         }
     }
 
@@ -410,6 +440,8 @@ struct YouTubeDownloadView: View {
             do {
                 let filePath = try await YouTubeService.shared.download(
                     url: url,
+                    format: selectedFormat,
+                    bitrate: selectedBitrate,
                     artist: artist.isEmpty ? nil : artist,
                     album: album.isEmpty ? nil : album,
                     genre: genre.isEmpty ? nil : genre,
