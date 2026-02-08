@@ -372,17 +372,6 @@ class YouTubeService {
              print("Warning: FFmpeg not found. Conversion and metadata embedding may fail.")
         }
 
-        // If manual overrides are present, append postprocessor args
-        // Note: This is complex and might fail if syntax is wrong for current ffmpeg version.
-        // Simplified approach: trust yt-dlp to get metadata, and only rely on user overrides in the app database (SongItem).
-        // The file on disk will have YouTube metadata. The app DB will have user overrides if specified in UI.
-        // Wait, the UI code creates SongItem with overrides if provided.
-        // So `addToLibrary` in ContentView uses `artist.isEmpty ? "Unknown" : artist`.
-        // So the App DB is correct.
-        // The User Request says "metadata not downloading... of youtube".
-        // This implies they want the YouTube title/artist in the file.
-        // My change to add `--add-metadata` solves this.
-
         return try await Task.detached(priority: .userInitiated) {
             let process = Process()
 
