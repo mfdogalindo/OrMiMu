@@ -19,6 +19,9 @@ struct ContentView: View {
     @State private var playlistPath = NavigationPath()
     @State private var selectedPlaylist: PlaylistItem?
 
+    @StateObject private var statusManager = StatusManager()
+    @StateObject private var audioPlayerManager = AudioPlayerManager()
+
     enum SidebarItem: Hashable, Identifiable {
         case library
         case playlists
@@ -28,56 +31,75 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selectedTab) {
-                NavigationLink(value: SidebarItem.library) {
+        VStack(spacing: 0) {
+            // Header / Content Selector
+            HStack(spacing: 20) {
+                Button(action: { selectedTab = .library }) {
                     Label("Library", systemImage: "music.note")
                 }
-                NavigationLink(value: SidebarItem.playlists) {
+                .buttonStyle(HeaderButtonStyle(isSelected: selectedTab == .library))
+
+                Button(action: { selectedTab = .playlists }) {
                     Label("Playlists", systemImage: "music.note.list")
                 }
-                NavigationLink(value: SidebarItem.download) {
+                .buttonStyle(HeaderButtonStyle(isSelected: selectedTab == .playlists))
+
+                Button(action: { selectedTab = .download }) {
                     Label("Download", systemImage: "arrow.down.circle")
                 }
-            }
-            .listStyle(.sidebar)
-            .navigationTitle("OrMiMu")
-            .toolbar {
+                .buttonStyle(HeaderButtonStyle(isSelected: selectedTab == .download))
+
+                Spacer()
+
                 if selectedTab == .library {
-                    ToolbarItem {
-                        Button(action: addFolder) {
-                            Label("Add Folder", systemImage: "folder.badge.plus")
-                        }
+                    Button(action: addFolder) {
+                        Label("Add Folder", systemImage: "folder.badge.plus")
                     }
                 }
             }
-        } detail: {
-            switch selectedTab {
-            case .library:
-                MusicListView(songs: allSongs, playableSong: $playableSong)
-                    .navigationTitle("Library")
-            case .playlists:
-                NavigationStack(path: $playlistPath) {
-                    PlaylistListView(selectedPlaylist: $selectedPlaylist)
-                        .navigationDestination(for: PlaylistItem.self) { playlist in
-                            PlaylistDetailView(playlist: playlist, playableSong: $playableSong)
-                        }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+
+            // Content
+            ZStack {
+                switch selectedTab {
+                case .library:
+                    MusicListView(songs: allSongs, playableSong: $playableSong)
+                case .playlists:
+                    NavigationStack(path: $playlistPath) {
+                        PlaylistListView(selectedPlaylist: $selectedPlaylist)
+                            .navigationDestination(for: PlaylistItem.self) { playlist in
+                                PlaylistDetailView(playlist: playlist, playableSong: $playableSong)
+                            }
+                    }
+                case .download:
+                    YouTubeDownloadView()
+                case .none, .some:
+                    Text("Select an item")
                 }
-            case .download:
-                YouTubeDownloadView()
-            case .none, .some:
-                Text("Select an item")
             }
-        }
-        .overlay(alignment: .bottom) {
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Playing Controls
             if playableSong != nil {
                 MusicPlayer(playableSong: $playableSong)
                     .frame(height: 80)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(10)
                     .padding()
+                    .background(Material.bar)
             }
+
+            // Status Bar
+            HStack {
+                Text(statusManager.statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(8)
+            .background(Color(NSColor.windowBackgroundColor))
         }
+        .environmentObject(statusManager)
+        .environmentObject(audioPlayerManager)
     }
 
     private func addFolder() {
@@ -88,12 +110,26 @@ struct ContentView: View {
 
         panel.begin { response in
             if response == .OK, let url = panel.url {
-                let service = LibraryService(modelContext: modelContext)
+                let service = LibraryService(modelContext: modelContext, statusManager: statusManager)
                 Task {
                     await service.scanFolder(at: url)
                 }
             }
         }
+    }
+}
+
+struct HeaderButtonStyle: ButtonStyle {
+    var isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+            .cornerRadius(8)
+            .foregroundStyle(isSelected ? Color.accentColor : .primary)
+            .opacity(configuration.isPressed ? 0.8 : 1.0)
     }
 }
 
@@ -263,6 +299,7 @@ struct SmartPlaylistView: View {
 
 struct YouTubeDownloadView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var statusManager: StatusManager
     @State private var urlString: String = ""
     @State private var artist: String = ""
     @State private var album: String = ""
@@ -270,7 +307,7 @@ struct YouTubeDownloadView: View {
     @State private var year: String = ""
 
     @State private var isDownloading = false
-    @State private var statusMessage: String = ""
+    // Removed local statusMessage state
 
     // Dependency Management
     @State private var isInstallingDependencies = false
@@ -305,18 +342,13 @@ struct YouTubeDownloadView: View {
                 ProgressView("Downloading...")
             }
 
-            if !statusMessage.isEmpty {
-                Text(statusMessage)
-                    .foregroundStyle(statusMessage.starts(with: "Error") ? .red : .green)
-            }
-
             Button("Download") {
                 startDownload()
             }
             .disabled(urlString.isEmpty || isDownloading || !dependenciesInstalled)
         }
         .padding()
-        .navigationTitle("YouTube Download")
+        //.navigationTitle("YouTube Download") // Not needed in main content area
         .onAppear {
             checkDependencies()
         }
@@ -336,11 +368,11 @@ struct YouTubeDownloadView: View {
                 await MainActor.run {
                     dependenciesInstalled = true
                     isInstallingDependencies = false
-                    statusMessage = "Dependencies installed successfully!"
+                    statusManager.statusMessage = "Dependencies installed successfully!"
                 }
             } catch {
                 await MainActor.run {
-                    statusMessage = "Error installing dependencies: \(error.localizedDescription)"
+                    statusManager.statusMessage = "Error installing dependencies: \(error.localizedDescription)"
                     isInstallingDependencies = false
                 }
             }
@@ -349,12 +381,12 @@ struct YouTubeDownloadView: View {
 
     private func startDownload() {
         guard let url = URL(string: urlString) else {
-            statusMessage = "Error: Invalid URL"
+            statusManager.statusMessage = "Error: Invalid URL"
             return
         }
 
         isDownloading = true
-        statusMessage = "Starting..."
+        statusManager.statusMessage = "Starting download..."
 
         Task {
             do {
@@ -368,13 +400,13 @@ struct YouTubeDownloadView: View {
 
                 await MainActor.run {
                     addToLibrary(filePath: filePath)
-                    statusMessage = "Success! Saved to \(filePath)"
+                    statusManager.statusMessage = "Success! Saved to \(filePath)"
                     isDownloading = false
                     urlString = ""
                 }
             } catch {
                 await MainActor.run {
-                    statusMessage = "Error: \(error.localizedDescription)"
+                    statusManager.statusMessage = "Error: \(error.localizedDescription)"
                     isDownloading = false
                 }
             }
@@ -399,12 +431,13 @@ struct YouTubeDownloadView: View {
 
 struct SyncView: View {
     let songs: [SongItem]
+    @EnvironmentObject var statusManager: StatusManager
 
     @State private var destinationURL: URL?
     @State private var organizeByMetadata = true
     @State private var randomOrder = false
     @State private var isSyncing = false
-    @State private var statusMessage = ""
+    // Removed local statusMessage
     @State private var progress: Double = 0
     @State private var showFileImporter = false
 
@@ -443,9 +476,6 @@ struct SyncView: View {
 
             if isSyncing {
                 ProgressView("Syncing...")
-            } else if !statusMessage.isEmpty {
-                Text(statusMessage)
-                    .foregroundStyle(statusMessage.starts(with: "Error") ? .red : .green)
             }
 
             Button("Start Sync") {
@@ -464,7 +494,7 @@ struct SyncView: View {
             case .success(let urls):
                 destinationURL = urls.first
             case .failure(let error):
-                statusMessage = "Error selecting folder: \(error.localizedDescription)"
+                statusManager.statusMessage = "Error selecting folder: \(error.localizedDescription)"
             }
         }
     }
@@ -473,7 +503,7 @@ struct SyncView: View {
         guard let destination = destinationURL else { return }
 
         isSyncing = true
-        statusMessage = "Syncing..."
+        statusManager.statusMessage = "Syncing..."
         progress = 0
 
         Task {
@@ -486,13 +516,13 @@ struct SyncView: View {
                 )
 
                 await MainActor.run {
-                    statusMessage = "Sync Complete!"
+                    statusManager.statusMessage = "Sync Complete!"
                     progress = 1.0
                     isSyncing = false
                 }
             } catch {
                 await MainActor.run {
-                    statusMessage = "Error: \(error.localizedDescription)"
+                    statusManager.statusMessage = "Error: \(error.localizedDescription)"
                     isSyncing = false
                 }
             }

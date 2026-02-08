@@ -50,20 +50,33 @@ class AddFolder{
 
 class LibraryService {
     let modelContext: ModelContext
+    let statusManager: StatusManager?
 
-    init(modelContext: ModelContext) {
+    init(modelContext: ModelContext, statusManager: StatusManager? = nil) {
         self.modelContext = modelContext
+        self.statusManager = statusManager
     }
 
     func scanFolder(at url: URL) async {
+        await MainActor.run {
+            statusManager?.statusMessage = "Scanning folder: \(url.lastPathComponent)..."
+        }
+
         let fileManager = FileManager.default
         // Create an enumerator that skips hidden files
         guard let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
+            await MainActor.run {
+                statusManager?.statusMessage = "Failed to access folder."
+            }
             return
         }
 
         while let fileURL = enumerator.nextObject() as? URL {
             if fileURL.pathExtension.lowercased() == "mp3" {
+                await MainActor.run {
+                    statusManager?.statusMessage = "Processing: \(fileURL.lastPathComponent)"
+                }
+
                 // Check if exists logic could go here, but for now we insert.
                 // Ideally we should check if filePath already exists in DB.
 
@@ -82,6 +95,10 @@ class LibraryService {
 
                 modelContext.insert(song)
             }
+        }
+
+        await MainActor.run {
+            statusManager?.statusMessage = "Scan complete."
         }
     }
 
@@ -118,7 +135,7 @@ class LibraryService {
                     newTag.artist = "\(value)"
                 case "albumName":
                     newTag.album = "\(value)"
-                case "type":
+                case "genre":
                     newTag.genre = "\(value)"
                 case "creationDate":
                     newTag.year = "\(value)"
