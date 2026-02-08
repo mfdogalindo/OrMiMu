@@ -220,6 +220,17 @@ class YouTubeService {
         return nil
     }
 
+    private func getPythonPath() -> String? {
+        // Check for standard python3 installation
+        let commonPaths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
+        for path in commonPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+        return nil
+    }
+
     func download(url: URL, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil) async throws -> String {
         guard let ytDlpPath = getExecutablePath() else {
             throw YouTubeError.toolNotFound
@@ -271,8 +282,18 @@ class YouTubeService {
         // Run process
         return try await Task.detached(priority: .userInitiated) {
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: ytDlpPath)
-            process.arguments = arguments
+
+            // Check if we can/should run with python explicitly to avoid environment issues
+            let pythonPath = YouTubeService.shared.getPythonPath()
+            if let python = pythonPath {
+                process.executableURL = URL(fileURLWithPath: python)
+                var newArgs = [ytDlpPath]
+                newArgs.append(contentsOf: arguments)
+                process.arguments = newArgs
+            } else {
+                process.executableURL = URL(fileURLWithPath: ytDlpPath)
+                process.arguments = arguments
+            }
 
             // Set environment to find system tools (like ffmpeg if installed by user elsewhere)
             var env = ProcessInfo.processInfo.environment
