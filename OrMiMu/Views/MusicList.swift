@@ -210,6 +210,20 @@ struct EditMetadataView: View {
         song.artist = artist
         song.album = album
         song.genre = genre
+
+        Task {
+            do {
+                try await MetadataService.updateMetadata(
+                    filePath: song.filePath,
+                    title: title,
+                    artist: artist,
+                    album: album,
+                    genre: genre
+                )
+            } catch {
+                print("Failed to save metadata to file: \(error)")
+            }
+        }
         dismiss()
     }
 }
