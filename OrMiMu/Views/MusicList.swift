@@ -8,6 +8,19 @@
 import SwiftUI
 import SwiftData
 
+enum SongField {
+    case title, artist, album, genre
+
+    var displayName: String {
+        switch self {
+        case .title: return "Title"
+        case .artist: return "Artist"
+        case .album: return "Album"
+        case .genre: return "Genre"
+        }
+    }
+}
+
 struct MusicListView: View {
     var songs: [SongItem]
     @Binding var playableSong: URL?
@@ -19,34 +32,38 @@ struct MusicListView: View {
 
     @State private var selectedSongIDs = Set<SongItem.ID>()
 
+    // Metadata Editing State
+    @State private var songToEdit: SongItem?
+    @State private var editingField: SongField?
+
     var body: some View {
         Table(songs, selection: $selectedSongIDs) {
             TableColumn("Title") { song in
                 Text(song.title)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
-                        playSong(song)
+                        editSong(song, field: .title)
                     }
             }
             TableColumn("Artist") { song in
                 Text(song.artist)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
-                        playSong(song)
+                        editSong(song, field: .artist)
                     }
             }
             TableColumn("Album") { song in
                 Text(song.album)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
-                        playSong(song)
+                        editSong(song, field: .album)
                     }
             }
             TableColumn("Genre") { song in
                 Text(song.genre)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
-                        playSong(song)
+                        editSong(song, field: .genre)
                     }
             }
             TableColumn("Length") { song in
@@ -91,6 +108,14 @@ struct MusicListView: View {
                 }
             }
         }
+        .sheet(item: $songToEdit) { song in
+            EditMetadataView(song: song, initialField: editingField)
+        }
+    }
+
+    private func editSong(_ song: SongItem, field: SongField) {
+        editingField = field
+        songToEdit = song
     }
     
     private func playSong(_ song: SongItem) {
@@ -129,5 +154,62 @@ struct MusicListView: View {
         let minutes = Int(seconds) / 60
         let seconds = Int(seconds) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+struct EditMetadataView: View {
+    var song: SongItem
+    var initialField: SongField?
+
+    @Environment(\.dismiss) private var dismiss
+
+    // Using separate state to allow cancel
+    @State private var title: String = ""
+    @State private var artist: String = ""
+    @State private var album: String = ""
+    @State private var genre: String = ""
+
+    @FocusState private var focusedField: SongField?
+
+    var body: some View {
+        Form {
+            TextField("Title", text: $title)
+                .focused($focusedField, equals: .title)
+            TextField("Artist", text: $artist)
+                .focused($focusedField, equals: .artist)
+            TextField("Album", text: $album)
+                .focused($focusedField, equals: .album)
+            TextField("Genre", text: $genre)
+                .focused($focusedField, equals: .genre)
+
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                Spacer()
+                Button("Save") {
+                    save()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(.top)
+        }
+        .padding()
+        .frame(minWidth: 300)
+        .onAppear {
+            title = song.title
+            artist = song.artist
+            album = song.album
+            genre = song.genre
+            focusedField = initialField
+        }
+    }
+
+    private func save() {
+        song.title = title
+        song.artist = artist
+        song.album = album
+        song.genre = genre
+        dismiss()
     }
 }

@@ -50,47 +50,57 @@ struct MusicPlayer: View {
             .padding(.horizontal)
 
             // Bottom: Controls + Volume
-            HStack(spacing: 20) {
-                Button(action: { audioPlayerManager.previous() }) {
-                    Image(systemName: "backward.fill")
-                        .font(.title2)
-                }
-                .buttonStyle(.plain)
+            ZStack {
+                // Centered Controls
+                HStack(spacing: 20) {
+                    Spacer()
 
-                Button(action: {
-                    if audioPlayerManager.isPlaying {
-                        audioPlayerManager.pause()
-                    } else {
-                        // Play current or resume
-                         if let song = playableSong {
-                             // Correctly using playAudio with current metadata if available, though manager handles resume internally now
-                             audioPlayerManager.playAudio(from: song, title: audioPlayerManager.currentTitle, artist: audioPlayerManager.currentArtist)
-                         }
+                    Button(action: { audioPlayerManager.previous() }) {
+                        Image(systemName: "backward.fill")
+                            .font(.title2)
                     }
-                }) {
-                    Image(systemName: audioPlayerManager.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 40))
+                    .buttonStyle(.plain)
+
+                    Button(action: {
+                        if audioPlayerManager.isPlaying {
+                            audioPlayerManager.pause()
+                        } else {
+                            // Play current or resume
+                             if let song = playableSong {
+                                 // Correctly using playAudio with current metadata if available, though manager handles resume internally now
+                                 audioPlayerManager.playAudio(from: song, title: audioPlayerManager.currentTitle, artist: audioPlayerManager.currentArtist)
+                             }
+                        }
+                    }) {
+                        Image(systemName: audioPlayerManager.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 40))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: { audioPlayerManager.next() }) {
+                        Image(systemName: "forward.fill")
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
                 }
-                .buttonStyle(.plain)
 
-                Button(action: { audioPlayerManager.next() }) {
-                    Image(systemName: "forward.fill")
-                        .font(.title2)
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
+                // Right-aligned Volume
                 HStack {
-                    Image(systemName: "speaker.fill")
-                        .font(.caption)
-                    Slider(value: Binding(
-                        get: { audioPlayerManager.volume },
-                        set: { audioPlayerManager.setVolume($0) }
-                    ), in: 0...1)
-                    .frame(width: 80)
-                    Image(systemName: "speaker.wave.3.fill")
-                        .font(.caption)
+                    Spacer()
+
+                    HStack {
+                        Image(systemName: "speaker.fill")
+                            .font(.caption)
+                        Slider(value: Binding(
+                            get: { audioPlayerManager.volume },
+                            set: { audioPlayerManager.setVolume($0) }
+                        ), in: 0...1)
+                        .frame(width: 80)
+                        Image(systemName: "speaker.wave.3.fill")
+                            .font(.caption)
+                    }
                 }
             }
             .padding(.horizontal)

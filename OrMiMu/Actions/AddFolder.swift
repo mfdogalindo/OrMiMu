@@ -208,7 +208,8 @@ enum YouTubeError: LocalizedError {
 class DependencyManager {
     static let shared = DependencyManager()
 
-    private let ytDlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp")!
+    // Updated to use the standalone macOS binary to avoid Python version issues
+    private let ytDlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
 
     var binDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -218,7 +219,8 @@ class DependencyManager {
     }
 
     var ytDlpPath: URL {
-        return binDirectory.appendingPathComponent("yt-dlp")
+        // Changed filename to ensure we don't pick up the old script version
+        return binDirectory.appendingPathComponent("yt-dlp_macos")
     }
 
     func isInstalled() -> Bool {
@@ -229,7 +231,7 @@ class DependencyManager {
         // Create directory
         _ = binDirectory
 
-        // Download yt-dlp
+        // Download yt-dlp_macos
         let (tempURL, response) = try await URLSession.shared.download(from: ytDlpURL)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
@@ -257,12 +259,12 @@ class YouTubeService {
     static let shared = YouTubeService()
 
     private func getExecutablePath() -> String? {
-        // Prefer managed dependency
+        // Prefer managed dependency (standalone binary)
         if DependencyManager.shared.isInstalled() {
             return DependencyManager.shared.ytDlpPath.path
         }
 
-        // Fallback to system check
+        // Fallback to system check (user installed, likely script version which needs python)
         let commonPaths = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp", "/usr/bin/yt-dlp"]
         for path in commonPaths {
             if FileManager.default.fileExists(atPath: path) {
@@ -274,6 +276,19 @@ class YouTubeService {
 
     private func getPythonPath() -> String? {
         // Check for standard python3 installation
+        // Updated to prioritize newer versions and common paths on macOS
+        let versionedNames = ["python3.12", "python3.11", "python3.10"]
+        let commonSearchPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+
+        for name in versionedNames {
+            for path in commonSearchPaths {
+                 let fullPath = path + "/" + name
+                 if FileManager.default.fileExists(atPath: fullPath) {
+                     return fullPath
+                 }
+            }
+        }
+
         let commonPaths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
         for path in commonPaths {
             if FileManager.default.fileExists(atPath: path) {
@@ -335,16 +350,27 @@ class YouTubeService {
         return try await Task.detached(priority: .userInitiated) {
             let process = Process()
 
-            // Check if we can/should run with python explicitly to avoid environment issues
-            let pythonPath = YouTubeService.shared.getPythonPath()
-            if let python = pythonPath {
-                process.executableURL = URL(fileURLWithPath: python)
-                var newArgs = [ytDlpPath]
-                newArgs.append(contentsOf: arguments)
-                process.arguments = newArgs
-            } else {
+            // Logic change: If using the managed standalone binary, execute directly.
+            // If using a system-installed yt-dlp (which might be the python script), try to use python if needed.
+
+            let isManagedBinary = ytDlpPath == DependencyManager.shared.ytDlpPath.path
+
+            if isManagedBinary {
+                // Standalone binary, no python needed
                 process.executableURL = URL(fileURLWithPath: ytDlpPath)
                 process.arguments = arguments
+            } else {
+                // System installed, likely script. Try to wrap in python to ensure valid interpreter
+                let pythonPath = YouTubeService.shared.getPythonPath()
+                if let python = pythonPath {
+                    process.executableURL = URL(fileURLWithPath: python)
+                    var newArgs = [ytDlpPath]
+                    newArgs.append(contentsOf: arguments)
+                    process.arguments = newArgs
+                } else {
+                    process.executableURL = URL(fileURLWithPath: ytDlpPath)
+                    process.arguments = arguments
+                }
             }
 
             // Set environment to find system tools (like ffmpeg if installed by user elsewhere)
