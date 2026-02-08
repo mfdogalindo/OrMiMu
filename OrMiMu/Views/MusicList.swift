@@ -20,18 +20,43 @@ struct MusicListView: View {
 
     var body: some View {
         Table(songs, selection: $selectedSongIDs) {
-            TableColumn("Title", value: \.title)
-            TableColumn("Artist", value: \.artist)
-            TableColumn("Album", value: \.album)
-            TableColumn("Genre", value: \.genre)
+            TableColumn("Title") { song in
+                Text(song.title)
+                    .onTapGesture(count: 2) {
+                        playSong(song)
+                    }
+            }
+            TableColumn("Artist") { song in
+                Text(song.artist)
+                    .onTapGesture(count: 2) {
+                        playSong(song)
+                    }
+            }
+            TableColumn("Album") { song in
+                Text(song.album)
+                    .onTapGesture(count: 2) {
+                        playSong(song)
+                    }
+            }
+            TableColumn("Genre") { song in
+                Text(song.genre)
+                    .onTapGesture(count: 2) {
+                        playSong(song)
+                    }
+            }
             TableColumn("Length") { song in
                 Text(formatDuration(song.duration))
+                    .onTapGesture(count: 2) {
+                        playSong(song)
+                    }
             }
         }
         .contextMenu(forSelectionType: SongItem.ID.self) { selectedIDs in
             if !selectedIDs.isEmpty {
                 Button("Play") {
-                    playSelectedSong(selectedIDs: selectedIDs)
+                    if let firstID = selectedIDs.first, let song = songs.first(where: { $0.id == firstID }) {
+                        playSong(song)
+                    }
                 }
                 Divider()
 
@@ -54,22 +79,12 @@ struct MusicListView: View {
                 }
             }
         }
-        // Double click handler
-        // Using onChange of selection is not enough for double click.
-        // Attaching gesture to Table might work if selection is updated first.
-        .simultaneousGesture(TapGesture(count: 2).onEnded {
-            if !selectedSongIDs.isEmpty {
-                playSelectedSong(selectedIDs: selectedSongIDs)
-            }
-        })
-    }
-
-    private func playSelectedSong(selectedIDs: Set<SongItem.ID>) {
-        if let firstID = selectedIDs.first, let song = songs.first(where: { $0.id == firstID }) {
-            audioManager.playAudio(from: URL(fileURLWithPath: song.filePath))
-        }
     }
     
+    private func playSong(_ song: SongItem) {
+        audioManager.playAudio(from: URL(fileURLWithPath: song.filePath))
+    }
+
     private func addToPlaylist(playlist: PlaylistItem, songIDs: Set<SongItem.ID>) {
         let selectedSongs = songs.filter { songIDs.contains($0.id) }
         if playlist.songs == nil { playlist.songs = [] }

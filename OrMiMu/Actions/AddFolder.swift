@@ -63,7 +63,8 @@ class LibraryService {
         }
 
         while let fileURL = enumerator.nextObject() as? URL {
-            if fileURL.pathExtension.lowercased() == "mp3" {
+            let ext = fileURL.pathExtension.lowercased()
+            if ["mp3", "m4a", "wav", "opus", "flac"].contains(ext) {
                 // Check if exists logic could go here, but for now we insert.
                 // Ideally we should check if filePath already exists in DB.
 
@@ -142,7 +143,7 @@ enum YouTubeError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .toolNotFound:
-            return "yt-dlp command line tool was not found. Please click 'Install Dependencies' to set it up automatically."
+            return "yt-dlp or ffmpeg command line tool was not found. Please click 'Install Dependencies' to set it up automatically."
         case .downloadFailed(let message):
             return "Download failed: \(message)"
         case .invalidURL:
@@ -157,6 +158,8 @@ class DependencyManager {
     static let shared = DependencyManager()
 
     private let ytDlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
+    // Using a reliable static build for ffmpeg
+    private let ffmpegURL = URL(string: "https://evermeet.cx/ffmpeg/ffmpeg-122659-g8f57b04fe5.zip")!
 
     var binDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -169,35 +172,65 @@ class DependencyManager {
         return binDirectory.appendingPathComponent("yt-dlp_macos")
     }
 
+    var ffmpegPath: URL {
+        return binDirectory.appendingPathComponent("ffmpeg")
+    }
+
     func isInstalled() -> Bool {
-        return FileManager.default.fileExists(atPath: ytDlpPath.path)
+        return FileManager.default.fileExists(atPath: ytDlpPath.path) && FileManager.default.fileExists(atPath: ffmpegPath.path)
     }
 
     func install(progress: ((Double) -> Void)? = nil) async throws {
         // Create directory
         _ = binDirectory
 
-        // Download yt-dlp
-        let (tempURL, response) = try await URLSession.shared.download(from: ytDlpURL)
-
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw YouTubeError.dependencyInstallFailed("Download failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        // 1. Download yt-dlp
+        let (tempYtURL, ytResponse) = try await URLSession.shared.download(from: ytDlpURL)
+        guard let httpYtResponse = ytResponse as? HTTPURLResponse, httpYtResponse.statusCode == 200 else {
+            throw YouTubeError.dependencyInstallFailed("yt-dlp download failed")
         }
 
-        // Move to final location
         if FileManager.default.fileExists(atPath: ytDlpPath.path) {
             try FileManager.default.removeItem(at: ytDlpPath)
         }
-        try FileManager.default.moveItem(at: tempURL, to: ytDlpPath)
+        try FileManager.default.moveItem(at: tempYtURL, to: ytDlpPath)
 
         // Make executable
+        try setExecutable(path: ytDlpPath.path)
+        progress?(0.5)
+
+        // 2. Download ffmpeg
+        let (tempFfmpegZipURL, ffmpegResponse) = try await URLSession.shared.download(from: ffmpegURL)
+        guard let httpFfmpegResponse = ffmpegResponse as? HTTPURLResponse, httpFfmpegResponse.statusCode == 200 else {
+            throw YouTubeError.dependencyInstallFailed("ffmpeg download failed")
+        }
+
+        // Unzip ffmpeg
+        // We use /usr/bin/unzip because FileManager doesn't support unzipping directly
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/chmod")
-        process.arguments = ["+x", ytDlpPath.path]
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-o", tempFfmpegZipURL.path, "-d", binDirectory.path]
         try process.run()
         process.waitUntilExit()
 
+        // Make executable (just in case)
+        if FileManager.default.fileExists(atPath: ffmpegPath.path) {
+             try setExecutable(path: ffmpegPath.path)
+        } else {
+             // Sometimes zip contains a folder, but evermeet zip usually contains the binary at root
+             // If not found, we might need to search
+             throw YouTubeError.dependencyInstallFailed("ffmpeg binary not found after unzip")
+        }
+
         progress?(1.0)
+    }
+
+    private func setExecutable(path: String) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/chmod")
+        process.arguments = ["+x", path]
+        try process.run()
+        process.waitUntilExit()
     }
 }
 
@@ -205,17 +238,22 @@ class YouTubeService {
     static let shared = YouTubeService()
 
     private func getExecutablePath() -> String? {
-        // Prefer managed dependency
         if DependencyManager.shared.isInstalled() {
             return DependencyManager.shared.ytDlpPath.path
         }
-
-        // Fallback to system check
+        // Fallback
         let commonPaths = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp", "/usr/bin/yt-dlp"]
         for path in commonPaths {
             if FileManager.default.fileExists(atPath: path) {
                 return path
             }
+        }
+        return nil
+    }
+
+    private func getFFmpegDirectory() -> String? {
+        if DependencyManager.shared.isInstalled() {
+            return DependencyManager.shared.binDirectory.path
         }
         return nil
     }
@@ -230,21 +268,26 @@ class YouTubeService {
 
         let outputTemplate = outputFolder.path + "/%(title)s.%(ext)s"
 
-        let ffmpegAvailable = hasFFmpeg()
+        // Check if we have managed ffmpeg or system ffmpeg
+        let ffmpegDir = getFFmpegDirectory()
+        // If we don't have managed, check hasFFmpeg()
+        let systemFFmpeg = hasFFmpeg()
+        let hasAnyFFmpeg = ffmpegDir != nil || systemFFmpeg
 
         var arguments: [String] = []
 
-        if ffmpegAvailable {
+        if hasAnyFFmpeg {
             arguments = [
                 "-x",
                 "--audio-format", audioFormat,
                 "--audio-quality", audioQuality,
+                "--embed-metadata", // Embed metadata (requires ffmpeg)
                 "-o", outputTemplate,
                 "--no-playlist",
                 url.absoluteString
             ]
         } else {
-            // Fallback to best audio (usually m4a or webm) if no ffmpeg
+            // Fallback
             print("FFmpeg not found. Downloading best audio format available.")
             arguments = [
                 "-f", "bestaudio[ext=m4a]/bestaudio",
@@ -254,14 +297,6 @@ class YouTubeService {
             ]
         }
 
-        // Metadata overrides
-        if let artist = artist, !artist.isEmpty {
-            // yt-dlp metadata setting often requires ffmpeg too for embedding
-            if ffmpegAvailable {
-                arguments.append(contentsOf: ["--metadata-from-title", "%(artist)s - %(title)s"])
-            }
-        }
-
         // Run process
         return try await Task.detached(priority: .userInitiated) {
             let process = Process()
@@ -269,9 +304,18 @@ class YouTubeService {
             process.executableURL = URL(fileURLWithPath: ytDlpPath)
             process.arguments = arguments
 
-            // Set environment to find system tools (like ffmpeg if installed by user elsewhere)
+            // Set environment
             var env = ProcessInfo.processInfo.environment
-            env["PATH"] = (env["PATH"] ?? "") + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+            var pathEnv = env["PATH"] ?? ""
+
+            // Add managed bin directory to PATH so yt-dlp can find ffmpeg
+            if let managedBin = ffmpegDir {
+                pathEnv = managedBin + ":" + pathEnv
+            }
+            // Add other common paths
+            pathEnv += ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
+            env["PATH"] = pathEnv
             process.environment = env
 
             let pipe = Pipe()
@@ -286,7 +330,7 @@ class YouTubeService {
 
             if process.terminationStatus == 0 {
                 // Parse output to find filename
-                if let line = output.components(separatedBy: .newlines).first(where: { ($0.contains(".mp3") || $0.contains(".m4a") || $0.contains(".opus") || $0.contains(".webm")) && $0.contains("Destination") }) {
+                if let line = output.components(separatedBy: .newlines).first(where: { ($0.contains(".mp3") || $0.contains(".m4a") || $0.contains(".opus") || $0.contains(".wav")) && $0.contains("Destination") }) {
                     let components = line.components(separatedBy: "Destination: ")
                     if components.count > 1 {
                         return components[1].trimmingCharacters(in: .whitespacesAndNewlines)
@@ -301,11 +345,6 @@ class YouTubeService {
                          }
                      }
                 }
-
-                // Fallback: return folder and let caller scan? A bit risky.
-                // Let's assume standard output format.
-                // If we can't find it, maybe list files in folder and find newest?
-                // For now, return outputFolder if we can't parse.
                 return outputFolder.path
             } else {
                 throw YouTubeError.downloadFailed("Exit code \(process.terminationStatus): \(output)")
@@ -318,13 +357,9 @@ class YouTubeService {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         process.arguments = ["ffmpeg"]
 
-        // Add common paths to environment just in case
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = (env["PATH"] ?? "") + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
         process.environment = env
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
 
         do {
             try process.run()
