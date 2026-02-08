@@ -7,6 +7,11 @@
 
 import Foundation
 import AppKit
+import SwiftData
+import AVFoundation
+
+// Global list of supported audio extensions for consistency
+let kSupportedAudioExtensions = ["mp3", "m4a", "flac", "wav", "aac", "ogg", "aiff"]
 
 class AddFolder{
     
@@ -37,7 +42,8 @@ class AddFolder{
 
       var mp3Files: [String] = []
       while let file = enumerator?.nextObject() as? String {
-        if file.hasSuffix(".mp3") {
+        let ext = (file as NSString).pathExtension.lowercased()
+        if kSupportedAudioExtensions.contains(ext) {
           mp3Files.append(file)
         }
       }
@@ -46,3 +52,449 @@ class AddFolder{
 
 }
 
+class LibraryService {
+    let modelContext: ModelContext
+    let statusManager: StatusManager?
+
+    init(modelContext: ModelContext, statusManager: StatusManager? = nil) {
+        self.modelContext = modelContext
+        self.statusManager = statusManager
+    }
+
+    func scanFolder(at url: URL) async {
+        await MainActor.run {
+            statusManager?.isBusy = true
+            statusManager?.statusMessage = "Scanning folder: \(url.lastPathComponent)..."
+        }
+
+        let fileManager = FileManager.default
+        // Create an enumerator that skips hidden files
+        guard let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
+            await MainActor.run {
+                statusManager?.statusMessage = "Failed to access folder."
+            }
+            return
+        }
+
+        while let fileURL = enumerator.nextObject() as? URL {
+            let ext = fileURL.pathExtension.lowercased()
+            if kSupportedAudioExtensions.contains(ext) {
+                await MainActor.run {
+                    statusManager?.statusMessage = "Processing: \(fileURL.lastPathComponent)"
+                }
+
+                let filePath = fileURL.path
+                let descriptor = FetchDescriptor<SongItem>(
+                    predicate: #Predicate { $0.filePath == filePath }
+                )
+
+                // Check if already exists
+                if let existingCount = try? modelContext.fetchCount(descriptor), existingCount > 0 {
+                    await MainActor.run {
+                        statusManager?.statusMessage = "Skipping duplicate: \(fileURL.lastPathComponent)"
+                    }
+                    continue
+                }
+
+                let tags = await MetadataService.readMetadata(url: fileURL)
+                let duration = await getDuration(url: fileURL)
+
+                let song = SongItem(
+                    title: tags.title.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : tags.title,
+                    artist: tags.artist.isEmpty ? "Unknown Artist" : tags.artist,
+                    album: tags.album.isEmpty ? "Unknown Album" : tags.album,
+                    genre: tags.genre.isEmpty ? "Unknown Genre" : tags.genre,
+                    year: tags.year.isEmpty ? "Unknown Year" : tags.year,
+                    filePath: fileURL.path,
+                    duration: duration
+                )
+
+                modelContext.insert(song)
+            }
+        }
+
+        await MainActor.run {
+            statusManager?.statusMessage = "Scan complete."
+            statusManager?.isBusy = false
+        }
+    }
+
+    func refreshMetadata(for songs: [SongItem]) async {
+        await MainActor.run {
+            statusManager?.isBusy = true
+        }
+
+        let fileManager = FileManager.default
+        var count = 0
+        let total = songs.count
+
+        for song in songs {
+            count += 1
+            if count % 10 == 0 || count == 1 {
+                await MainActor.run {
+                    statusManager?.statusMessage = "Updating metadata: \(count)/\(total)"
+                }
+            }
+
+            let url = URL(fileURLWithPath: song.filePath)
+            guard fileManager.fileExists(atPath: song.filePath) else { continue }
+
+            let tags = await MetadataService.readMetadata(url: url)
+            let duration = await getDuration(url: url)
+
+            // Update song properties
+            song.title = tags.title.isEmpty ? url.deletingPathExtension().lastPathComponent : tags.title
+            song.artist = tags.artist.isEmpty ? "Unknown Artist" : tags.artist
+            song.album = tags.album.isEmpty ? "Unknown Album" : tags.album
+            song.genre = tags.genre.isEmpty ? "Unknown Genre" : tags.genre
+            song.year = tags.year.isEmpty ? "Unknown Year" : tags.year
+            song.duration = duration
+        }
+
+        await MainActor.run {
+            statusManager?.statusMessage = "Metadata update complete."
+            statusManager?.isBusy = false
+            // Save context if needed, though SwiftData usually autosaves
+            try? modelContext.save()
+        }
+    }
+
+    private func getDuration(url: URL) async -> Double {
+        let asset = AVURLAsset(url: url)
+        do {
+            let duration = try await asset.load(.duration)
+            return CMTimeGetSeconds(duration)
+        } catch {
+            return 0
+        }
+    }
+
+}
+
+enum YouTubeError: LocalizedError {
+    case toolNotFound
+    case downloadFailed(String)
+    case invalidURL
+    case dependencyInstallFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .toolNotFound:
+            return "yt-dlp command line tool was not found. Please click 'Install Dependencies' to set it up automatically."
+        case .downloadFailed(let message):
+            return "Download failed: \(message)"
+        case .invalidURL:
+            return "The provided URL is invalid."
+        case .dependencyInstallFailed(let message):
+            return "Failed to install dependencies: \(message)"
+        }
+    }
+}
+
+class DependencyManager {
+    static let shared = DependencyManager()
+
+    // Updated to use the standalone macOS binary to avoid Python version issues
+    private let ytDlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
+    // Using a reliable source for static ffmpeg build
+    private let ffmpegURL = URL(string: "https://evermeet.cx/ffmpeg/get/zip")!
+
+    var binDirectory: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let binDir = appSupport.appendingPathComponent("OrMiMu/bin")
+        try? FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+        return binDir
+    }
+
+    var ytDlpPath: URL {
+        return binDirectory.appendingPathComponent("yt-dlp_macos")
+    }
+
+    var ffmpegPath: URL {
+        return binDirectory.appendingPathComponent("ffmpeg")
+    }
+
+    func isInstalled() -> Bool {
+        // Need both tools
+        return FileManager.default.fileExists(atPath: ytDlpPath.path) &&
+               FileManager.default.fileExists(atPath: ffmpegPath.path)
+    }
+
+    func install(progress: ((Double) -> Void)? = nil) async throws {
+        // Create directory
+        _ = binDirectory
+
+        // 1. Install yt-dlp
+        if FileManager.default.fileExists(atPath: ytDlpPath.path) {
+             try? FileManager.default.removeItem(at: ytDlpPath)
+        }
+
+        let (tempURL, response) = try await URLSession.shared.download(from: ytDlpURL)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw YouTubeError.dependencyInstallFailed("yt-dlp download failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+
+        try FileManager.default.moveItem(at: tempURL, to: ytDlpPath)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/chmod")
+        process.arguments = ["+x", ytDlpPath.path]
+        try process.run()
+        process.waitUntilExit()
+
+        progress?(0.5)
+
+        // 2. Install ffmpeg
+        if FileManager.default.fileExists(atPath: ffmpegPath.path) {
+             try? FileManager.default.removeItem(at: ffmpegPath)
+        }
+
+        let (ffmpegTempURL, ffmpegResponse) = try await URLSession.shared.download(from: ffmpegURL)
+        guard let ffHttpResponse = ffmpegResponse as? HTTPURLResponse, ffHttpResponse.statusCode == 200 else {
+            throw YouTubeError.dependencyInstallFailed("ffmpeg download failed")
+        }
+
+        // Unzip logic
+        // We can use /usr/bin/unzip
+        let unzipProcess = Process()
+        unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        unzipProcess.arguments = ["-o", ffmpegTempURL.path, "-d", binDirectory.path]
+        try unzipProcess.run()
+        unzipProcess.waitUntilExit()
+
+        // Ensure ffmpeg is executable
+        if FileManager.default.fileExists(atPath: ffmpegPath.path) {
+            let chmodFF = Process()
+            chmodFF.executableURL = URL(fileURLWithPath: "/bin/chmod")
+            chmodFF.arguments = ["+x", ffmpegPath.path]
+            try chmodFF.run()
+            chmodFF.waitUntilExit()
+        }
+
+        progress?(1.0)
+    }
+}
+
+class YouTubeService {
+    static let shared = YouTubeService()
+
+    private func getExecutablePath() -> String? {
+        if DependencyManager.shared.isInstalled() {
+            return DependencyManager.shared.ytDlpPath.path
+        }
+        // Fallback checks...
+        let commonPaths = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp", "/usr/bin/yt-dlp"]
+        for path in commonPaths {
+            if FileManager.default.fileExists(atPath: path) { return path }
+        }
+        return nil
+    }
+
+    private func getFFmpegPath() -> String? {
+        // Prefer managed
+        if FileManager.default.fileExists(atPath: DependencyManager.shared.ffmpegPath.path) {
+            return DependencyManager.shared.ffmpegPath.path
+        }
+        // Fallback
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["ffmpeg"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try? process.run()
+        process.waitUntilExit()
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+            return path
+        }
+        return nil
+    }
+
+    private func getPythonPath() -> String? {
+        let versionedNames = ["python3.12", "python3.11", "python3.10"]
+        let commonSearchPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+        for name in versionedNames {
+            for path in commonSearchPaths {
+                 let fullPath = path + "/" + name
+                 if FileManager.default.fileExists(atPath: fullPath) { return fullPath }
+            }
+        }
+        let commonPaths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
+        for path in commonPaths {
+            if FileManager.default.fileExists(atPath: path) { return path }
+        }
+        return nil
+    }
+
+    func download(url: URL, format: String, bitrate: String, statusManager: StatusManager, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil, onFileFinished: ((String) async throws -> Void)? = nil) async throws -> [String] {
+        guard let ytDlpPath = getExecutablePath() else {
+            throw YouTubeError.toolNotFound
+        }
+
+        let outputFolder = FileManager.default.urls(for: .musicDirectory, in: .userDomainMask).first?.appendingPathComponent("OrMiMu") ?? FileManager.default.temporaryDirectory.appendingPathComponent("OrMiMu_Downloads")
+        try? FileManager.default.createDirectory(at: outputFolder, withIntermediateDirectories: true)
+
+        let outputTemplate = outputFolder.path + "/%(title)s.%(ext)s"
+        let ffmpegPath = getFFmpegPath()
+
+        var arguments: [String] = [
+            "-x", // Extract audio
+            "--audio-format", format,
+            "--audio-quality", "\(bitrate)K",
+            "--add-metadata",
+            "--embed-thumbnail",
+            "-o", outputTemplate,
+            "--yes-playlist",
+            "--exec", "echo DOWNLOAD_COMPLETED_HOOK:%(filepath)s",
+            url.absoluteString
+        ]
+
+        if let ffmpeg = ffmpegPath {
+             var newArgs: [String] = ["--ffmpeg-location", ffmpeg]
+             newArgs.append(contentsOf: arguments)
+             arguments = newArgs
+        } else {
+             print("Warning: FFmpeg not found. Conversion and metadata embedding may fail.")
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            let isManagedBinary = ytDlpPath == DependencyManager.shared.ytDlpPath.path
+
+            if isManagedBinary {
+                process.executableURL = URL(fileURLWithPath: ytDlpPath)
+                process.arguments = arguments
+            } else {
+                let pythonPath = YouTubeService.shared.getPythonPath()
+                if let python = pythonPath {
+                    process.executableURL = URL(fileURLWithPath: python)
+                    var newArgs = [ytDlpPath]
+                    newArgs.append(contentsOf: arguments)
+                    process.arguments = newArgs
+                } else {
+                    process.executableURL = URL(fileURLWithPath: ytDlpPath)
+                    process.arguments = arguments
+                }
+            }
+
+            var env = ProcessInfo.processInfo.environment
+            env["PATH"] = (env["PATH"] ?? "") + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+            process.environment = env
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            var collectedPaths: [String] = []
+            let queue = DispatchQueue(label: "com.ormimu.outputQueue")
+
+            DispatchQueue.main.async {
+                statusManager.cancelAction = {
+                    process.terminate()
+                }
+            }
+
+            var currentFileIndex: Double = 1.0
+            var totalFiles: Double = 1.0
+
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty, let string = String(data: data, encoding: .utf8) else { return }
+
+                let lines = string.components(separatedBy: .newlines)
+                for line in lines {
+                    if line.isEmpty { continue }
+
+                    // Detect playlist progress: [download] Downloading video 1 of 5
+                    if let range = line.range(of: "Downloading video (\\d+) of (\\d+)", options: .regularExpression) {
+                         let detail = String(line[range])
+
+                         let nsString = detail as NSString
+                         let regex = try? NSRegularExpression(pattern: "Downloading video (\\d+) of (\\d+)")
+                         if let match = regex?.firstMatch(in: detail, range: NSRange(location: 0, length: detail.utf16.count)) {
+                             if let r1 = Range(match.range(at: 1), in: detail), let r2 = Range(match.range(at: 2), in: detail) {
+                                 currentFileIndex = Double(String(detail[r1])) ?? 1.0
+                                 totalFiles = Double(String(detail[r2])) ?? 1.0
+                             }
+                         }
+
+                         DispatchQueue.main.async {
+                             statusManager.statusDetail = detail
+                         }
+                    }
+
+                    // Detect percentage: [download]  25.0%
+                    if let range = line.range(of: "\\[download\\]\\s+(\\d+\\.?\\d*)%", options: .regularExpression) {
+                        let match = String(line[range])
+                        if let numberRange = match.range(of: "\\d+\\.?\\d*", options: .regularExpression),
+                           let fileProgress = Double(String(match[numberRange])) {
+
+                            let globalProgress = ((currentFileIndex - 1.0) + (fileProgress / 100.0)) / totalFiles
+
+                            DispatchQueue.main.async {
+                                statusManager.progress = globalProgress
+                            }
+                        }
+                    }
+
+                    // Detect Hook
+                    if line.contains("DOWNLOAD_COMPLETED_HOOK:") {
+                        let components = line.components(separatedBy: "DOWNLOAD_COMPLETED_HOOK:")
+                        if components.count > 1 {
+                            let path = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                            Task {
+                                try? await onFileFinished?(path)
+                            }
+                        }
+                    }
+
+                    // Detect destination
+                    if line.contains("Destination:") {
+                        let components = line.components(separatedBy: "Destination: ")
+                        if components.count > 1 {
+                            let path = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                            queue.async {
+                                collectedPaths.append(path)
+                            }
+                        }
+                    }
+                }
+            }
+
+            process.terminationHandler = { process in
+                pipe.fileHandleForReading.readabilityHandler = nil
+
+                if process.terminationStatus == 0 {
+                    queue.sync {
+                        // Filter paths to only include those that match the requested format or exist
+                        // Since 'Destination' can appear multiple times (temp files), we should check existence
+                        let finalPaths = collectedPaths.filter { path in
+                            FileManager.default.fileExists(atPath: path) &&
+                            (path.hasSuffix(".\(format)") || path.hasSuffix(".mp3"))
+                        }
+                        // If no specific format match found (maybe conversion didn't happen or different ext), return existing ones
+                        // But usually we want unique paths.
+                        let uniquePaths = Array(Set(finalPaths))
+
+                        // If we found nothing but success, maybe it was a 'already downloaded' case
+                        if uniquePaths.isEmpty {
+                             let existing = collectedPaths.filter { FileManager.default.fileExists(atPath: $0) }
+                             continuation.resume(returning: Array(Set(existing)))
+                        } else {
+                             continuation.resume(returning: uniquePaths)
+                        }
+                    }
+                } else {
+                    continuation.resume(throwing: YouTubeError.downloadFailed("Process terminated with status \(process.terminationStatus)"))
+                }
+            }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+}
