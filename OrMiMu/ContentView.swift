@@ -458,8 +458,10 @@ struct YouTubeDownloadView: View {
                     year: year.isEmpty ? nil : year
                 )
 
+                let tags = await MetadataService.readMetadata(url: URL(fileURLWithPath: filePath))
+
                 await MainActor.run {
-                    addToLibrary(filePath: filePath)
+                    addToLibrary(filePath: filePath, tags: tags)
                     statusManager.statusMessage = "Success! Saved to \(filePath)"
                     isDownloading = false
                     statusManager.isBusy = false
@@ -475,13 +477,13 @@ struct YouTubeDownloadView: View {
         }
     }
 
-    private func addToLibrary(filePath: String) {
+    private func addToLibrary(filePath: String, tags: MetadataService.ExtractedTags) {
         let song = SongItem(
-            title: URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent,
-            artist: artist.isEmpty ? "Unknown Artist" : artist,
-            album: album.isEmpty ? "Unknown Album" : album,
-            genre: genre.isEmpty ? "Unknown Genre" : genre,
-            year: year.isEmpty ? "Unknown Year" : year,
+            title: tags.title.isEmpty ? URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent : tags.title,
+            artist: tags.artist.isEmpty ? "Unknown Artist" : tags.artist,
+            album: tags.album.isEmpty ? "Unknown Album" : tags.album,
+            genre: tags.genre.isEmpty ? "Unknown Genre" : tags.genre,
+            year: tags.year.isEmpty ? "Unknown Year" : tags.year,
             filePath: filePath,
             duration: 0 // Should ideally read duration from file
         )

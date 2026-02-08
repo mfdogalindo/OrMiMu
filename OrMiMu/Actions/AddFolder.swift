@@ -96,7 +96,7 @@ class LibraryService {
                     continue
                 }
 
-                let tags = await getID3Tag(url: fileURL)
+                let tags = await MetadataService.readMetadata(url: fileURL)
                 let duration = await getDuration(url: fileURL)
 
                 let song = SongItem(
@@ -139,7 +139,7 @@ class LibraryService {
             let url = URL(fileURLWithPath: song.filePath)
             guard fileManager.fileExists(atPath: song.filePath) else { continue }
 
-            let tags = await getID3Tag(url: url)
+            let tags = await MetadataService.readMetadata(url: url)
             let duration = await getDuration(url: url)
 
             // Update song properties
@@ -169,75 +169,6 @@ class LibraryService {
         }
     }
 
-    struct ExtractedTags {
-        var title: String = ""
-        var artist: String = ""
-        var album: String = ""
-        var genre: String = ""
-        var year: String = ""
-    }
-
-    private func getID3Tag(url: URL) async -> ExtractedTags {
-        var newTag = ExtractedTags()
-        let asset = AVURLAsset(url: url)
-        do {
-            let metadata = try await asset.load(.metadata)
-            for item in metadata {
-                let value = try await item.load(.value)
-                guard let value = value else { continue }
-
-                var handled = false
-
-                // Prioritize commonKey
-                if let key = item.commonKey?.rawValue {
-                    switch key {
-                    case "title":
-                        newTag.title = "\(value)"
-                        handled = true
-                    case "artist":
-                        newTag.artist = "\(value)"
-                        handled = true
-                    case "albumName":
-                        newTag.album = "\(value)"
-                        handled = true
-                    // REMOVED genre from commonKey to force fallback to identifier logic
-                    // which prioritizes text-based identifiers over numeric ones.
-                    case "creationDate":
-                        newTag.year = "\(value)"
-                        handled = true
-                    default:
-                        break
-                    }
-                }
-
-                // Fallback to identifier for ID3 tags if not found via commonKey
-                if !handled, let identifier = item.identifier?.rawValue {
-                     // Genre: ID3 TCON, iTunes ©gen, iTunes gnre
-                     // Prioritize text-based genres (©gen, TCON) over numeric/index based (gnre)
-                     if identifier.contains("id3/TCON") || identifier.contains("genre") || identifier.contains("©gen") {
-                         newTag.genre = "\(value)"
-                     } else if newTag.genre.isEmpty && identifier.contains("gnre") {
-                         newTag.genre = "\(value)"
-                     }
-                     // Title: ID3 TIT2, iTunes ©nam
-                     if newTag.title.isEmpty && (identifier.contains("id3/TIT2") || identifier.contains("title") || identifier.contains("©nam")) {
-                         newTag.title = "\(value)"
-                     }
-                     // Artist: ID3 TPE1, iTunes ©ART
-                     if newTag.artist.isEmpty && (identifier.contains("id3/TPE1") || identifier.contains("artist") || identifier.contains("©ART")) {
-                         newTag.artist = "\(value)"
-                     }
-                     // Album: ID3 TALB, iTunes ©alb
-                     if newTag.album.isEmpty && (identifier.contains("id3/TALB") || identifier.contains("album") || identifier.contains("©alb")) {
-                         newTag.album = "\(value)"
-                     }
-                }
-            }
-        } catch {
-            print("Error reading metadata for \(url): \(error)")
-        }
-        return newTag
-    }
 }
 
 enum YouTubeError: LocalizedError {
@@ -464,10 +395,11 @@ class YouTubeService {
 
             if process.terminationStatus == 0 {
                 // Parse output to find filename
+                var finalPath = outputFolder.path
                  if let line = output.components(separatedBy: .newlines).first(where: { $0.contains("Destination:") && ($0.contains(".mp3") || $0.contains(".\(format)")) }) {
                     let components = line.components(separatedBy: "Destination: ")
                     if components.count > 1 {
-                        return components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                        finalPath = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
                     }
                 }
                  // Try finding "has been downloaded"
@@ -475,7 +407,7 @@ class YouTubeService {
                      if let match = output.components(separatedBy: .newlines).first(where: { $0.contains("[download]") && $0.contains("Destination:") }) {
                          let components = match.components(separatedBy: "Destination: ")
                          if components.count > 1 {
-                             return components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                             finalPath = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
                          }
                      }
                 }
@@ -485,14 +417,39 @@ class YouTubeService {
                  if let line = output.components(separatedBy: .newlines).first(where: { $0.contains("[ExtractAudio] Destination:") }) {
                      let components = line.components(separatedBy: "Destination: ")
                      if components.count > 1 {
-                         return components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                         finalPath = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
                      }
                  }
 
-                return outputFolder.path
+                // Check for metadata overrides
+                if let title = title, !title.isEmpty {
+                     try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
+                } else if let artist = artist, !artist.isEmpty {
+                    try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
+                } else if let album = album, !album.isEmpty {
+                    try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
+                } else if let genre = genre, !genre.isEmpty {
+                    try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
+                } else if let year = year, !year.isEmpty {
+                    try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
+                }
+
+                return finalPath
             } else {
                 throw YouTubeError.downloadFailed("Exit code \(process.terminationStatus): \(output)")
             }
         }.value
+    }
+
+    func applyMetadataOverride(path: String, title: String?, artist: String?, album: String?, genre: String?, year: String?) async throws {
+        let currentTags = await MetadataService.readMetadata(url: URL(fileURLWithPath: path))
+
+        let newTitle = (title != nil && !title!.isEmpty) ? title! : currentTags.title
+        let newArtist = (artist != nil && !artist!.isEmpty) ? artist! : currentTags.artist
+        let newAlbum = (album != nil && !album!.isEmpty) ? album! : currentTags.album
+        let newGenre = (genre != nil && !genre!.isEmpty) ? genre! : currentTags.genre
+        let newYear = (year != nil && !year!.isEmpty) ? year! : currentTags.year
+
+        try await MetadataService.updateMetadata(filePath: path, title: newTitle, artist: newArtist, album: newAlbum, genre: newGenre, year: newYear)
     }
 }
