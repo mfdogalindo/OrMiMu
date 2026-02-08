@@ -208,7 +208,7 @@ enum YouTubeError: LocalizedError {
 class DependencyManager {
     static let shared = DependencyManager()
 
-    private let ytDlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp")!
+    private let ytDlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
 
     var binDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -218,7 +218,7 @@ class DependencyManager {
     }
 
     var ytDlpPath: URL {
-        return binDirectory.appendingPathComponent("yt-dlp")
+        return binDirectory.appendingPathComponent("yt-dlp_macos")
     }
 
     func isInstalled() -> Bool {
@@ -234,6 +234,12 @@ class DependencyManager {
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw YouTubeError.dependencyInstallFailed("Download failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+
+        // Cleanup old version if exists
+        let oldPath = binDirectory.appendingPathComponent("yt-dlp")
+        if FileManager.default.fileExists(atPath: oldPath.path) {
+            try? FileManager.default.removeItem(at: oldPath)
         }
 
         // Move to final location
@@ -264,17 +270,6 @@ class YouTubeService {
 
         // Fallback to system check
         let commonPaths = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp", "/usr/bin/yt-dlp"]
-        for path in commonPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-        return nil
-    }
-
-    private func getPythonPath() -> String? {
-        // Check for standard python3 installation
-        let commonPaths = ["/usr/bin/python3", "/usr/local/bin/python3", "/opt/homebrew/bin/python3"]
         for path in commonPaths {
             if FileManager.default.fileExists(atPath: path) {
                 return path
@@ -335,17 +330,8 @@ class YouTubeService {
         return try await Task.detached(priority: .userInitiated) {
             let process = Process()
 
-            // Check if we can/should run with python explicitly to avoid environment issues
-            let pythonPath = YouTubeService.shared.getPythonPath()
-            if let python = pythonPath {
-                process.executableURL = URL(fileURLWithPath: python)
-                var newArgs = [ytDlpPath]
-                newArgs.append(contentsOf: arguments)
-                process.arguments = newArgs
-            } else {
-                process.executableURL = URL(fileURLWithPath: ytDlpPath)
-                process.arguments = arguments
-            }
+            process.executableURL = URL(fileURLWithPath: ytDlpPath)
+            process.arguments = arguments
 
             // Set environment to find system tools (like ffmpeg if installed by user elsewhere)
             var env = ProcessInfo.processInfo.environment
