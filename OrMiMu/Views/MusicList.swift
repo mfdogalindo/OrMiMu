@@ -29,6 +29,7 @@ struct MusicListView: View {
     @Query private var playlists: [PlaylistItem]
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var audioPlayerManager: AudioPlayerManager
+    @EnvironmentObject var statusManager: StatusManager
 
     @State private var selectedSongIDs = Set<SongItem.ID>()
 
@@ -165,12 +166,16 @@ struct MusicListView: View {
 
         Task {
             do {
-                try await ConversionService.convert(song: song, to: defaultFormat, bitrate: defaultBitrate)
-                // Refresh specific song metadata/path if needed, or re-fetch
-                // Since `convert` will likely update the `song` object properties (filePath),
-                // the UI should update automatically if observed.
+                try await ConversionService.convert(
+                    song: song,
+                    to: defaultFormat,
+                    bitrate: defaultBitrate,
+                    statusManager: statusManager
+                )
+                // Ensure model context saves changes to filePath
+                try? modelContext.save()
             } catch {
-                print("Conversion failed: \(error)")
+                statusManager.statusMessage = "Conversion failed: \(error.localizedDescription)"
             }
         }
     }

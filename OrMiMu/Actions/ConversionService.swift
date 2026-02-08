@@ -15,7 +15,11 @@ enum ConversionError: Error {
 }
 
 class ConversionService {
-    static func convert(song: SongItem, to format: String, bitrate: String) async throws {
+    static func convert(song: SongItem, to format: String, bitrate: String, statusManager: StatusManager?) async throws {
+        await MainActor.run {
+            statusManager?.statusMessage = "Converting \"\(song.title)\" to \(format)..."
+        }
+
         // 1. Get ffmpeg path
         let ffmpegURL = DependencyManager.shared.ffmpegPath
 
@@ -79,7 +83,7 @@ class ConversionService {
                 // Update song item on MainActor
                 await MainActor.run {
                     song.filePath = outputURL.path
-                    // Trigger object update if needed for UI
+                    statusManager?.statusMessage = "Conversion complete: \"\(song.title)\""
                 }
             } else {
                 // Failure
