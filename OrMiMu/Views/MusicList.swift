@@ -39,6 +39,23 @@ struct MusicListView: View {
 
     var body: some View {
         Table(songs, selection: $selectedSongIDs) {
+            TableColumn("") { song in
+                if let playableSong = playableSong, playableSong.path == song.filePath {
+                    Image(systemName: "waveform")
+                        .foregroundStyle(.accent)
+                        .onTapGesture {
+                            playSong(song)
+                        }
+                } else {
+                    Image(systemName: "play.fill")
+                        .foregroundStyle(.secondary)
+                        .onTapGesture {
+                            playSong(song)
+                        }
+                }
+            }
+            .width(20)
+
             TableColumn("Title") { song in
                 Text(song.title)
                     .contentShape(Rectangle())

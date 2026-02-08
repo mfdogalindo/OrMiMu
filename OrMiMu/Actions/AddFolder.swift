@@ -63,6 +63,7 @@ class LibraryService {
 
     func scanFolder(at url: URL) async {
         await MainActor.run {
+            statusManager?.isBusy = true
             statusManager?.statusMessage = "Scanning folder: \(url.lastPathComponent)..."
         }
 
@@ -114,10 +115,15 @@ class LibraryService {
 
         await MainActor.run {
             statusManager?.statusMessage = "Scan complete."
+            statusManager?.isBusy = false
         }
     }
 
     func refreshMetadata(for songs: [SongItem]) async {
+        await MainActor.run {
+            statusManager?.isBusy = true
+        }
+
         let fileManager = FileManager.default
         var count = 0
         let total = songs.count
@@ -147,6 +153,7 @@ class LibraryService {
 
         await MainActor.run {
             statusManager?.statusMessage = "Metadata update complete."
+            statusManager?.isBusy = false
             // Save context if needed, though SwiftData usually autosaves
             try? modelContext.save()
         }
@@ -193,9 +200,8 @@ class LibraryService {
                     case "albumName":
                         newTag.album = "\(value)"
                         handled = true
-                    case "genre":
-                        newTag.genre = "\(value)"
-                        handled = true
+                    // REMOVED genre from commonKey to force fallback to identifier logic
+                    // which prioritizes text-based identifiers over numeric ones.
                     case "creationDate":
                         newTag.year = "\(value)"
                         handled = true

@@ -113,6 +113,11 @@ struct ContentView: View {
 
             // Status Bar
             HStack {
+                if statusManager.isBusy {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.8)
+                }
                 Text(statusManager.statusMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -409,6 +414,7 @@ struct YouTubeDownloadView: View {
 
     private func installDependencies() {
         isInstallingDependencies = true
+        statusManager.isBusy = true
         Task {
             do {
                 try await DependencyManager.shared.install { progress in
@@ -417,12 +423,14 @@ struct YouTubeDownloadView: View {
                 await MainActor.run {
                     dependenciesInstalled = true
                     isInstallingDependencies = false
+                    statusManager.isBusy = false
                     statusManager.statusMessage = "Dependencies installed successfully!"
                 }
             } catch {
                 await MainActor.run {
                     statusManager.statusMessage = "Error installing dependencies: \(error.localizedDescription)"
                     isInstallingDependencies = false
+                    statusManager.isBusy = false
                 }
             }
         }
@@ -435,6 +443,7 @@ struct YouTubeDownloadView: View {
         }
 
         isDownloading = true
+        statusManager.isBusy = true
         statusManager.statusMessage = "Starting download..."
 
         Task {
@@ -453,12 +462,14 @@ struct YouTubeDownloadView: View {
                     addToLibrary(filePath: filePath)
                     statusManager.statusMessage = "Success! Saved to \(filePath)"
                     isDownloading = false
+                    statusManager.isBusy = false
                     urlString = ""
                 }
             } catch {
                 await MainActor.run {
                     statusManager.statusMessage = "Error: \(error.localizedDescription)"
                     isDownloading = false
+                    statusManager.isBusy = false
                 }
             }
         }
@@ -554,6 +565,7 @@ struct SyncView: View {
         guard let destination = destinationURL else { return }
 
         isSyncing = true
+        statusManager.isBusy = true
         statusManager.statusMessage = "Syncing..."
         progress = 0
 
@@ -570,11 +582,13 @@ struct SyncView: View {
                     statusManager.statusMessage = "Sync Complete!"
                     progress = 1.0
                     isSyncing = false
+                    statusManager.isBusy = false
                 }
             } catch {
                 await MainActor.run {
                     statusManager.statusMessage = "Error: \(error.localizedDescription)"
                     isSyncing = false
+                    statusManager.isBusy = false
                 }
             }
         }

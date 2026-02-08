@@ -9,4 +9,5 @@ import SwiftUI
 
 class StatusManager: ObservableObject {
     @Published var statusMessage: String = ""
+    @Published var isBusy: Bool = false
 }
