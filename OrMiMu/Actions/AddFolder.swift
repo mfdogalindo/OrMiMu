@@ -10,6 +10,9 @@ import AppKit
 import SwiftData
 import AVFoundation
 
+// Global list of supported audio extensions for consistency
+let kSupportedAudioExtensions = ["mp3", "m4a", "flac", "wav", "aac", "ogg", "aiff"]
+
 class AddFolder{
     
     func selectFolder() -> MusicPath? {
@@ -39,7 +42,8 @@ class AddFolder{
 
       var mp3Files: [String] = []
       while let file = enumerator?.nextObject() as? String {
-        if file.hasSuffix(".mp3") || file.hasSuffix(".m4a") {
+        let ext = (file as NSString).pathExtension.lowercased()
+        if kSupportedAudioExtensions.contains(ext) {
           mp3Files.append(file)
         }
       }
@@ -73,7 +77,7 @@ class LibraryService {
 
         while let fileURL = enumerator.nextObject() as? URL {
             let ext = fileURL.pathExtension.lowercased()
-            if ext == "mp3" || ext == "m4a" {
+            if kSupportedAudioExtensions.contains(ext) {
                 await MainActor.run {
                     statusManager?.statusMessage = "Processing: \(fileURL.lastPathComponent)"
                 }
