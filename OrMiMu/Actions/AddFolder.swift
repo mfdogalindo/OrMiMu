@@ -102,6 +102,41 @@ class LibraryService {
         }
     }
 
+    func refreshMetadata(for songs: [SongItem]) async {
+        let fileManager = FileManager.default
+        var count = 0
+        let total = songs.count
+
+        for song in songs {
+            count += 1
+            if count % 10 == 0 || count == 1 {
+                await MainActor.run {
+                    statusManager?.statusMessage = "Updating metadata: \(count)/\(total)"
+                }
+            }
+
+            let url = URL(fileURLWithPath: song.filePath)
+            guard fileManager.fileExists(atPath: song.filePath) else { continue }
+
+            let tags = await getID3Tag(url: url)
+            let duration = await getDuration(url: url)
+
+            // Update song properties
+            song.title = tags.title.isEmpty ? url.deletingPathExtension().lastPathComponent : tags.title
+            song.artist = tags.artist.isEmpty ? "Unknown Artist" : tags.artist
+            song.album = tags.album.isEmpty ? "Unknown Album" : tags.album
+            song.genre = tags.genre.isEmpty ? "Unknown Genre" : tags.genre
+            song.year = tags.year.isEmpty ? "Unknown Year" : tags.year
+            song.duration = duration
+        }
+
+        await MainActor.run {
+            statusManager?.statusMessage = "Metadata update complete."
+            // Save context if needed, though SwiftData usually autosaves
+            try? modelContext.save()
+        }
+    }
+
     private func getDuration(url: URL) async -> Double {
         let asset = AVURLAsset(url: url)
         do {

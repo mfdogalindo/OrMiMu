@@ -18,6 +18,7 @@ struct ContentView: View {
     // For Playlists navigation
     @State private var playlistPath = NavigationPath()
     @State private var selectedPlaylist: PlaylistItem?
+    @State private var showSmartPlaylistSheet = false
 
     @StateObject private var statusManager = StatusManager()
     @StateObject private var audioPlayerManager = AudioPlayerManager()
@@ -28,6 +29,18 @@ struct ContentView: View {
         case download
 
         var id: Self { self }
+
+        var name: String {
+            switch self {
+            case .library: return "Library"
+            case .playlists: return "Playlists"
+            case .download: return "Download"
+            }
+        }
+    }
+
+    var currentTitle: String {
+        return "OrMiMu - \(selectedTab?.name ?? "")"
     }
 
     var body: some View {
@@ -52,8 +65,18 @@ struct ContentView: View {
                 Spacer()
 
                 if selectedTab == .library {
+                    Button(action: refreshMetadata) {
+                        Label("Update Metadata", systemImage: "arrow.triangle.2.circlepath")
+                    }
                     Button(action: addFolder) {
                         Label("Add Folder", systemImage: "folder.badge.plus")
+                    }
+                } else if selectedTab == .playlists {
+                     Button(action: { showSmartPlaylistSheet = true }) {
+                        Label("Smart Playlist", systemImage: "wand.and.stars")
+                    }
+                    Button(action: addPlaylist) {
+                        Label("Add Playlist", systemImage: "plus")
                     }
                 }
             }
@@ -98,8 +121,12 @@ struct ContentView: View {
             .padding(8)
             .background(Color(NSColor.windowBackgroundColor))
         }
+        .navigationTitle(currentTitle)
         .environmentObject(statusManager)
         .environmentObject(audioPlayerManager)
+        .sheet(isPresented: $showSmartPlaylistSheet) {
+            SmartPlaylistView()
+        }
     }
 
     private func addFolder() {
@@ -116,6 +143,18 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private func refreshMetadata() {
+        let service = LibraryService(modelContext: modelContext, statusManager: statusManager)
+        Task {
+            await service.refreshMetadata(for: allSongs)
+        }
+    }
+
+    private func addPlaylist() {
+        let newPlaylist = PlaylistItem(name: "New Playlist")
+        modelContext.insert(newPlaylist)
     }
 }
 
@@ -139,7 +178,6 @@ struct PlaylistListView: View {
     @Query(sort: \PlaylistItem.name) private var playlists: [PlaylistItem]
     @Binding var selectedPlaylist: PlaylistItem?
     @Environment(\.modelContext) private var modelContext
-    @State private var showSmartPlaylistSheet = false
 
     var body: some View {
         List(selection: $selectedPlaylist) {
@@ -157,27 +195,7 @@ struct PlaylistListView: View {
                 }
             }
         }
-        .navigationTitle("Playlists")
-        .toolbar {
-            ToolbarItem {
-                Button(action: { showSmartPlaylistSheet = true }) {
-                    Label("Smart Playlist", systemImage: "wand.and.stars")
-                }
-            }
-            ToolbarItem {
-                Button(action: addPlaylist) {
-                    Label("Add Playlist", systemImage: "plus")
-                }
-            }
-        }
-        .sheet(isPresented: $showSmartPlaylistSheet) {
-            SmartPlaylistView()
-        }
-    }
-
-    private func addPlaylist() {
-        let newPlaylist = PlaylistItem(name: "New Playlist")
-        modelContext.insert(newPlaylist)
+        // Removed toolbar and state from here as they are moved to ContentView
     }
 }
 
