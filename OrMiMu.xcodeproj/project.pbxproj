@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		637A9FC92B7511360080D742 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637A9FC82B7511360080D742 /* Constants.swift */; };
-		637A9FCC2B75BA310080D742 /* SongModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637A9FCB2B75BA310080D742 /* SongModels.swift */; };
 		637A9FCE2B75CAC00080D742 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637A9FCD2B75CAC00080D742 /* AudioPlayer.swift */; };
 		637A9FD22B75D5CE0080D742 /* MusicPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637A9FD12B75D5CE0080D742 /* MusicPlayer.swift */; };
 		645F89AA2B744341000F99F0 /* OrMiMuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89A92B744341000F99F0 /* OrMiMuApp.swift */; };
@@ -22,6 +21,12 @@
 		645F89D92B74470C000F99F0 /* AddFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89D82B74470C000F99F0 /* AddFolder.swift */; };
 		645F89DC2B744E89000F99F0 /* FilesModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89DB2B744E89000F99F0 /* FilesModels.swift */; };
 		645F89DF2B745A83000F99F0 /* MusicList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645F89DE2B745A83000F99F0 /* MusicList.swift */; };
+		BA5614B52F38DF64005ED0F0 /* StatusManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5614B42F38DF64005ED0F0 /* StatusManager.swift */; };
+		BA5614B92F38F871005ED0F0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5614B82F38F871005ED0F0 /* SettingsView.swift */; };
+		BA5614BB2F38F8A1005ED0F0 /* SyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5614BA2F38F8A1005ED0F0 /* SyncService.swift */; };
+		BA5614BD2F38FD5C005ED0F0 /* AddFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5614BC2F38FD5C005ED0F0 /* AddFolder.swift */; };
+		BA5614C02F38FD69005ED0F0 /* MetadataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5614BF2F38FD69005ED0F0 /* MetadataService.swift */; };
+		BA5614C22F392E0A005ED0F0 /* ConversionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5614C12F392E0A005ED0F0 /* ConversionService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,7 +49,6 @@
 /* Begin PBXFileReference section */
 		637A9FC82B7511360080D742 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		637A9FCA2B752B330080D742 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		637A9FCB2B75BA310080D742 /* SongModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongModels.swift; sourceTree = "<group>"; };
 		637A9FCD2B75CAC00080D742 /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
 		637A9FD12B75D5CE0080D742 /* MusicPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicPlayer.swift; sourceTree = "<group>"; };
 		645F89A62B744341000F99F0 /* OrMiMu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OrMiMu.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -62,6 +66,12 @@
 		645F89D82B74470C000F99F0 /* AddFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFolder.swift; sourceTree = "<group>"; };
 		645F89DB2B744E89000F99F0 /* FilesModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilesModels.swift; sourceTree = "<group>"; };
 		645F89DE2B745A83000F99F0 /* MusicList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicList.swift; sourceTree = "<group>"; };
+		BA5614B42F38DF64005ED0F0 /* StatusManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusManager.swift; sourceTree = "<group>"; };
+		BA5614B82F38F871005ED0F0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		BA5614BA2F38F8A1005ED0F0 /* SyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncService.swift; sourceTree = "<group>"; };
+		BA5614BC2F38FD5C005ED0F0 /* AddFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFolder.swift; sourceTree = "<group>"; };
+		BA5614BF2F38FD69005ED0F0 /* MetadataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataService.swift; sourceTree = "<group>"; };
+		BA5614C12F392E0A005ED0F0 /* ConversionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversionService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +164,10 @@
 		645F89D72B7446E5000F99F0 /* Actions */ = {
 			isa = PBXGroup;
 			children = (
+				BA5614C12F392E0A005ED0F0 /* ConversionService.swift */,
+				BA5614BF2F38FD69005ED0F0 /* MetadataService.swift */,
+				BA5614BC2F38FD5C005ED0F0 /* AddFolder.swift */,
+				BA5614BA2F38F8A1005ED0F0 /* SyncService.swift */,
 				645F89D82B74470C000F99F0 /* AddFolder.swift */,
 				637A9FCD2B75CAC00080D742 /* AudioPlayer.swift */,
 			);
@@ -163,9 +177,9 @@
 		645F89DA2B744E37000F99F0 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				BA5614B42F38DF64005ED0F0 /* StatusManager.swift */,
 				645F89DB2B744E89000F99F0 /* FilesModels.swift */,
 				637A9FC82B7511360080D742 /* Constants.swift */,
-				637A9FCB2B75BA310080D742 /* SongModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -173,6 +187,7 @@
 		645F89DD2B745A5B000F99F0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				BA5614B82F38F871005ED0F0 /* SettingsView.swift */,
 				645F89DE2B745A83000F99F0 /* MusicList.swift */,
 				637A9FD12B75D5CE0080D742 /* MusicPlayer.swift */,
 			);
@@ -309,16 +324,21 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BA5614C02F38FD69005ED0F0 /* MetadataService.swift in Sources */,
+				BA5614C22F392E0A005ED0F0 /* ConversionService.swift in Sources */,
 				645F89AC2B744341000F99F0 /* ContentView.swift in Sources */,
 				645F89AE2B744341000F99F0 /* Item.swift in Sources */,
+				BA5614BB2F38F8A1005ED0F0 /* SyncService.swift in Sources */,
 				637A9FCE2B75CAC00080D742 /* AudioPlayer.swift in Sources */,
 				645F89AA2B744341000F99F0 /* OrMiMuApp.swift in Sources */,
 				645F89DF2B745A83000F99F0 /* MusicList.swift in Sources */,
 				637A9FC92B7511360080D742 /* Constants.swift in Sources */,
 				645F89D92B74470C000F99F0 /* AddFolder.swift in Sources */,
-				637A9FCC2B75BA310080D742 /* SongModels.swift in Sources */,
+				BA5614B52F38DF64005ED0F0 /* StatusManager.swift in Sources */,
 				637A9FD22B75D5CE0080D742 /* MusicPlayer.swift in Sources */,
 				645F89DC2B744E89000F99F0 /* FilesModels.swift in Sources */,
+				BA5614B92F38F871005ED0F0 /* SettingsView.swift in Sources */,
+				BA5614BD2F38FD5C005ED0F0 /* AddFolder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
