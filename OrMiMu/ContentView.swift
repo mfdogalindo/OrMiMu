@@ -272,8 +272,24 @@ struct YouTubeDownloadView: View {
     @State private var isDownloading = false
     @State private var statusMessage: String = ""
 
+    // Dependency Management
+    @State private var isInstallingDependencies = false
+    @State private var dependenciesInstalled = false
+
     var body: some View {
         Form {
+            if !dependenciesInstalled {
+                Section("Dependencies") {
+                    if isInstallingDependencies {
+                        ProgressView("Installing components...")
+                    } else {
+                        Button("Install Dependencies") {
+                            installDependencies()
+                        }
+                    }
+                }
+            }
+
             Section("Video URL") {
                 TextField("https://...", text: $urlString)
             }
@@ -297,10 +313,38 @@ struct YouTubeDownloadView: View {
             Button("Download") {
                 startDownload()
             }
-            .disabled(urlString.isEmpty || isDownloading)
+            .disabled(urlString.isEmpty || isDownloading || !dependenciesInstalled)
         }
         .padding()
         .navigationTitle("YouTube Download")
+        .onAppear {
+            checkDependencies()
+        }
+    }
+
+    private func checkDependencies() {
+        dependenciesInstalled = DependencyManager.shared.isInstalled()
+    }
+
+    private func installDependencies() {
+        isInstallingDependencies = true
+        Task {
+            do {
+                try await DependencyManager.shared.install { progress in
+                    // Update progress if needed
+                }
+                await MainActor.run {
+                    dependenciesInstalled = true
+                    isInstallingDependencies = false
+                    statusMessage = "Dependencies installed successfully!"
+                }
+            } catch {
+                await MainActor.run {
+                    statusMessage = "Error installing dependencies: \(error.localizedDescription)"
+                    isInstallingDependencies = false
+                }
+            }
+        }
     }
 
     private func startDownload() {

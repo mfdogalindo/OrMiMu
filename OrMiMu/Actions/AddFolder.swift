@@ -137,61 +137,91 @@ enum YouTubeError: LocalizedError {
     case toolNotFound
     case downloadFailed(String)
     case invalidURL
+    case dependencyInstallFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .toolNotFound:
-            return "yt-dlp command line tool was not found. Please install it (e.g., via Homebrew) and ensure it's in your PATH."
+            return "yt-dlp command line tool was not found. Please click 'Install Dependencies' to set it up automatically."
         case .downloadFailed(let message):
             return "Download failed: \(message)"
         case .invalidURL:
             return "The provided URL is invalid."
+        case .dependencyInstallFailed(let message):
+            return "Failed to install dependencies: \(message)"
         }
+    }
+}
+
+class DependencyManager {
+    static let shared = DependencyManager()
+
+    private let ytDlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp")!
+
+    var binDirectory: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let binDir = appSupport.appendingPathComponent("OrMiMu/bin")
+        try? FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+        return binDir
+    }
+
+    var ytDlpPath: URL {
+        return binDirectory.appendingPathComponent("yt-dlp")
+    }
+
+    func isInstalled() -> Bool {
+        return FileManager.default.fileExists(atPath: ytDlpPath.path)
+    }
+
+    func install(progress: ((Double) -> Void)? = nil) async throws {
+        // Create directory
+        _ = binDirectory
+
+        // Download yt-dlp
+        let (tempURL, response) = try await URLSession.shared.download(from: ytDlpURL)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw YouTubeError.dependencyInstallFailed("Download failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+        }
+
+        // Move to final location
+        if FileManager.default.fileExists(atPath: ytDlpPath.path) {
+            try FileManager.default.removeItem(at: ytDlpPath)
+        }
+        try FileManager.default.moveItem(at: tempURL, to: ytDlpPath)
+
+        // Make executable
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/chmod")
+        process.arguments = ["+x", ytDlpPath.path]
+        try process.run()
+        process.waitUntilExit()
+
+        progress?(1.0)
     }
 }
 
 class YouTubeService {
     static let shared = YouTubeService()
-    private var ytDlpPath: String?
 
-    init() {
-        self.ytDlpPath = findExecutable(name: "yt-dlp")
-    }
+    private func getExecutablePath() -> String? {
+        // Prefer managed dependency
+        if DependencyManager.shared.isInstalled() {
+            return DependencyManager.shared.ytDlpPath.path
+        }
 
-    private func findExecutable(name: String) -> String? {
-        // Try common locations first as 'which' might not be in path or sandboxed
+        // Fallback to system check
         let commonPaths = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp", "/usr/bin/yt-dlp"]
         for path in commonPaths {
             if FileManager.default.fileExists(atPath: path) {
                 return path
             }
         }
-
-        // Try finding with 'which'
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = [name]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
-                return path
-            }
-        } catch {
-            print("Error finding \(name): \(error)")
-        }
-
         return nil
     }
 
     func download(url: URL, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil) async throws -> String {
-        guard let ytDlpPath = ytDlpPath else {
+        guard let ytDlpPath = getExecutablePath() else {
             throw YouTubeError.toolNotFound
         }
 
@@ -200,35 +230,58 @@ class YouTubeService {
 
         let outputTemplate = outputFolder.path + "/%(title)s.%(ext)s"
 
-        // Use --print filename to get the filename first?
-        // Or just download.
-        // We'll run download.
+        // Use bestaudio format, which is often opus/m4a, and let yt-dlp select container if possible.
+        // Or specify m4a explicitly if we don't have ffmpeg for mp3 conversion.
+        // However, user requested mp3 initially.
+        // If ffmpeg is missing, -x --audio-format mp3 might fail.
+        // Let's try to detect if ffmpeg is available.
 
-        var arguments = [
-            "-x",
-            "--audio-format", "mp3",
-            "-o", outputTemplate,
-            "--no-playlist", // Download single video by default unless it's a playlist URL?
-            // If url is playlist, we might want to iterate. But for now assume single or let yt-dlp handle it.
-            // If it's a playlist, this might download multiple files.
-            url.absoluteString
-        ]
+        let ffmpegAvailable = hasFFmpeg()
+
+        var arguments: [String] = []
+
+        if ffmpegAvailable {
+            arguments = [
+                "-x",
+                "--audio-format", "mp3",
+                "-o", outputTemplate,
+                "--no-playlist",
+                url.absoluteString
+            ]
+        } else {
+            // Fallback to best audio (usually m4a or webm) if no ffmpeg
+            // We can't force mp3 without ffmpeg easily.
+            print("FFmpeg not found. Downloading best audio format available.")
+            arguments = [
+                "-f", "bestaudio[ext=m4a]/bestaudio",
+                "-o", outputTemplate,
+                "--no-playlist",
+                url.absoluteString
+            ]
+        }
 
         // Metadata overrides
         if let artist = artist, !artist.isEmpty {
-            arguments.append(contentsOf: ["--metadata-from-title", "%(artist)s - %(title)s"]) // Just an example, hard to force artist tag without complex args
-            // Better: use --parse-metadata
+            // yt-dlp metadata setting often requires ffmpeg too for embedding
+            if ffmpegAvailable {
+                arguments.append(contentsOf: ["--metadata-from-title", "%(artist)s - %(title)s"])
+            }
         }
 
-        // Run process in background
+        // Run process
         return try await Task.detached(priority: .userInitiated) {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: ytDlpPath)
             process.arguments = arguments
 
+            // Set environment to find system tools (like ffmpeg if installed by user elsewhere)
+            var env = ProcessInfo.processInfo.environment
+            env["PATH"] = (env["PATH"] ?? "") + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+            process.environment = env
+
             let pipe = Pipe()
             process.standardOutput = pipe
-            process.standardError = pipe // Capture error too
+            process.standardError = pipe
 
             try process.run()
             process.waitUntilExit()
@@ -237,23 +290,54 @@ class YouTubeService {
             let output = String(data: data, encoding: .utf8) ?? ""
 
             if process.terminationStatus == 0 {
-                // Parse output to find filename?
-                // yt-dlp usually prints "[ExtractAudio] Destination: ..."
-                // Simple hack: look for .mp3 in output lines
-                if let line = output.components(separatedBy: .newlines).first(where: { $0.contains(".mp3") && $0.contains("Destination") }) {
-                    // Extract path
-                    // Example: [ExtractAudio] Destination: /path/to/file.mp3
+                // Parse output to find filename
+                if let line = output.components(separatedBy: .newlines).first(where: { ($0.contains(".mp3") || $0.contains(".m4a") || $0.contains(".opus") || $0.contains(".webm")) && $0.contains("Destination") }) {
                     let components = line.components(separatedBy: "Destination: ")
                     if components.count > 1 {
                         return components[1].trimmingCharacters(in: .whitespacesAndNewlines)
                     }
                 }
-                // Fallback: return folder and let caller scan?
-                return outputFolder.path // This might be wrong if we need specific file.
+                 // Try finding "has been downloaded"
+                if let line = output.components(separatedBy: .newlines).first(where: { $0.contains("has been downloaded") }) {
+                     if let match = output.components(separatedBy: .newlines).first(where: { $0.contains("[download]") && $0.contains("Destination:") }) {
+                         let components = match.components(separatedBy: "Destination: ")
+                         if components.count > 1 {
+                             return components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                         }
+                     }
+                }
+
+                // Fallback: return folder and let caller scan? A bit risky.
+                // Let's assume standard output format.
+                // If we can't find it, maybe list files in folder and find newest?
+                // For now, return outputFolder if we can't parse.
+                return outputFolder.path
             } else {
                 throw YouTubeError.downloadFailed("Exit code \(process.terminationStatus): \(output)")
             }
         }.value
+    }
+
+    private func hasFFmpeg() -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["ffmpeg"]
+
+        // Add common paths to environment just in case
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = (env["PATH"] ?? "") + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        process.environment = env
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
     }
 }
 
