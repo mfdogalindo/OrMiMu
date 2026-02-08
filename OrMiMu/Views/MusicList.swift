@@ -42,7 +42,7 @@ struct MusicListView: View {
             TableColumn("") { song in
                 if let playableSong = playableSong, playableSong.path == song.filePath {
                     Image(systemName: "waveform")
-                        .foregroundStyle(.accent)
+                        .foregroundStyle(Color.accentColor)
                         .onTapGesture {
                             playSong(song)
                         }

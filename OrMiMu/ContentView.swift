@@ -452,16 +452,43 @@ struct YouTubeDownloadView: View {
                     url: url,
                     format: selectedFormat,
                     bitrate: selectedBitrate,
-                    artist: artist.isEmpty ? nil : artist,
-                    album: album.isEmpty ? nil : album,
-                    genre: genre.isEmpty ? nil : genre,
-                    year: year.isEmpty ? nil : year
+                    // Passing nil to overrides as we handle them explicitly after download
+                    artist: nil,
+                    album: nil,
+                    genre: nil,
+                    year: nil
                 )
 
-                let tags = await MetadataService.readMetadata(url: URL(fileURLWithPath: filePath))
+                // Read current tags (YouTube defaults)
+                var currentTags = await MetadataService.readMetadata(url: URL(fileURLWithPath: filePath))
+
+                // Check if any overrides are provided
+                if !artist.isEmpty || !album.isEmpty || !genre.isEmpty || !year.isEmpty {
+                    let finalTitle = currentTags.title
+                    let finalArtist = !artist.isEmpty ? artist : currentTags.artist
+                    let finalAlbum = !album.isEmpty ? album : currentTags.album
+                    let finalGenre = !genre.isEmpty ? genre : currentTags.genre
+                    let finalYear = !year.isEmpty ? year : currentTags.year
+
+                    // Apply override
+                    try await MetadataService.updateMetadata(
+                        filePath: filePath,
+                        title: finalTitle,
+                        artist: finalArtist,
+                        album: finalAlbum,
+                        genre: finalGenre,
+                        year: finalYear
+                    )
+
+                    // Update local tags struct with overridden values for UI/DB
+                    currentTags.artist = finalArtist
+                    currentTags.album = finalAlbum
+                    currentTags.genre = finalGenre
+                    currentTags.year = finalYear
+                }
 
                 await MainActor.run {
-                    addToLibrary(filePath: filePath, tags: tags)
+                    addToLibrary(filePath: filePath, tags: currentTags)
                     statusManager.statusMessage = "Success! Saved to \(filePath)"
                     isDownloading = false
                     statusManager.isBusy = false

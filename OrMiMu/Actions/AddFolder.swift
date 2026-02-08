@@ -421,35 +421,10 @@ class YouTubeService {
                      }
                  }
 
-                // Check for metadata overrides
-                if let title = title, !title.isEmpty {
-                     try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
-                } else if let artist = artist, !artist.isEmpty {
-                    try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
-                } else if let album = album, !album.isEmpty {
-                    try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
-                } else if let genre = genre, !genre.isEmpty {
-                    try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
-                } else if let year = year, !year.isEmpty {
-                    try? await YouTubeService.shared.applyMetadataOverride(path: finalPath, title: title, artist: artist, album: album, genre: genre, year: year)
-                }
-
                 return finalPath
             } else {
                 throw YouTubeError.downloadFailed("Exit code \(process.terminationStatus): \(output)")
             }
         }.value
-    }
-
-    func applyMetadataOverride(path: String, title: String?, artist: String?, album: String?, genre: String?, year: String?) async throws {
-        let currentTags = await MetadataService.readMetadata(url: URL(fileURLWithPath: path))
-
-        let newTitle = (title != nil && !title!.isEmpty) ? title! : currentTags.title
-        let newArtist = (artist != nil && !artist!.isEmpty) ? artist! : currentTags.artist
-        let newAlbum = (album != nil && !album!.isEmpty) ? album! : currentTags.album
-        let newGenre = (genre != nil && !genre!.isEmpty) ? genre! : currentTags.genre
-        let newYear = (year != nil && !year!.isEmpty) ? year! : currentTags.year
-
-        try await MetadataService.updateMetadata(filePath: path, title: newTitle, artist: newArtist, album: newAlbum, genre: newGenre, year: newYear)
     }
 }
