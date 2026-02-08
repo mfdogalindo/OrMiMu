@@ -39,7 +39,7 @@ class AddFolder{
 
       var mp3Files: [String] = []
       while let file = enumerator?.nextObject() as? String {
-        if file.hasSuffix(".mp3") {
+        if file.hasSuffix(".mp3") || file.hasSuffix(".m4a") {
           mp3Files.append(file)
         }
       }
@@ -72,7 +72,8 @@ class LibraryService {
         }
 
         while let fileURL = enumerator.nextObject() as? URL {
-            if fileURL.pathExtension.lowercased() == "mp3" {
+            let ext = fileURL.pathExtension.lowercased()
+            if ext == "mp3" || ext == "m4a" {
                 await MainActor.run {
                     statusManager?.statusMessage = "Processing: \(fileURL.lastPathComponent)"
                 }
