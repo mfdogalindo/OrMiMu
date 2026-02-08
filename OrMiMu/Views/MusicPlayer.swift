@@ -8,39 +8,125 @@
 import SwiftUI
 
 struct MusicPlayer: View {
-    @State private var isPlaying : Bool = false
-    @State private var isPaused : Bool = false
+    @EnvironmentObject var audioPlayerManager: AudioPlayerManager
     @Binding var playableSong: URL?
-    let audioPlayerManager = AudioPlayerManager()
     
-    var body: some View{
-        HStack{
-            if(playableSong != nil){
-                Button(action: {
-                    isPlaying = false; playableSong = nil; isPaused = false; audioPlayerManager.stopAudio()
-                }) {
-                    Label("Stop", systemImage: "stop.fill")
+    var body: some View {
+        VStack(spacing: 8) {
+            // Top: Song Info + Shuffle/Repeat
+            HStack {
+                VStack(alignment: .leading) {
+                    Text(audioPlayerManager.currentTitle.isEmpty ? (playableSong?.deletingPathExtension().lastPathComponent ?? "Unknown Song") : audioPlayerManager.currentTitle)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(audioPlayerManager.currentArtist.isEmpty ? "Unknown Artist" : audioPlayerManager.currentArtist)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                .padding(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 5))
-                Button(action: {
-                    isPaused = !isPaused;
-                    audioPlayerManager.pause()
-                }) {
-                    Label((isPaused ? "Play":"Pause"), systemImage: (isPaused ? "play.fill":"pause.fill"))
-                }
-                .padding(EdgeInsets(top: 10, leading: 5, bottom: 10, trailing: 5))
                 Spacer()
-                Text("Playing: \(playableSong!)")
-                    .padding(EdgeInsets(top: 10, leading: 5, bottom: 10, trailing: 20))
+                Button(action: { audioPlayerManager.toggleShuffle() }) {
+                    Image(systemName: "shuffle")
+                        .foregroundColor(audioPlayerManager.isShuffle ? .accentColor : .primary)
+                }
+                .buttonStyle(.plain)
             }
+            .padding(.horizontal)
 
+            // Middle: Scrubbing Slider
+            HStack {
+                Text(formatTime(audioPlayerManager.currentTime))
+                    .font(.caption2)
+                    .monospacedDigit()
+
+                Slider(value: Binding(
+                    get: { audioPlayerManager.currentTime },
+                    set: { audioPlayerManager.seek(to: $0) }
+                ), in: 0...(audioPlayerManager.duration > 0 ? audioPlayerManager.duration : 1))
+
+                Text(formatTime(audioPlayerManager.duration))
+                    .font(.caption2)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal)
+
+            // Bottom: Controls + Volume
+            ZStack {
+                // Centered Controls
+                HStack(spacing: 20) {
+                    Spacer()
+
+                    Button(action: { audioPlayerManager.previous() }) {
+                        Image(systemName: "backward.fill")
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: {
+                        if audioPlayerManager.isPlaying {
+                            audioPlayerManager.pause()
+                        } else {
+                            // Play current or resume
+                             if let song = playableSong {
+                                 // Correctly using playAudio with current metadata if available, though manager handles resume internally now
+                                 audioPlayerManager.playAudio(from: song, title: audioPlayerManager.currentTitle, artist: audioPlayerManager.currentArtist)
+                             }
+                        }
+                    }) {
+                        Image(systemName: audioPlayerManager.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 40))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: { audioPlayerManager.next() }) {
+                        Image(systemName: "forward.fill")
+                            .font(.title2)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+
+                // Right-aligned Volume
+                HStack {
+                    Spacer()
+
+                    HStack {
+                        Image(systemName: "speaker.fill")
+                            .font(.caption)
+                        Slider(value: Binding(
+                            get: { audioPlayerManager.volume },
+                            set: { audioPlayerManager.setVolume($0) }
+                        ), in: 0...1)
+                        .frame(width: 80)
+                        Image(systemName: "speaker.wave.3.fill")
+                            .font(.caption)
+                    }
+                }
+            }
+            .padding(.horizontal)
         }
-        .background(Color.black)
-        .onAppear{
-            isPlaying = true
-            audioPlayerManager.stopAudio()
-            audioPlayerManager.playAudio(from: playableSong!)
+        .padding(.vertical, 10)
+        .background(Material.bar)
+        .cornerRadius(12)
+        .shadow(radius: 5)
+        .onAppear {
+            // Initial play handled by manager queue setting in parent or previous state
+            if let song = playableSong, !audioPlayerManager.isPlaying {
+                 // Try to resume or play. If it's a fresh load, we might not have metadata here unless passed.
+                 // Ideally parent (MusicList) sets queue and plays.
+                 // This block is mostly for if the view reappears.
+            }
+        }
+        .onChange(of: audioPlayerManager.currentSongURL) { _, newURL in
+            if let url = newURL {
+                playableSong = url
+            }
         }
     }
-    
+
+    private func formatTime(_ time: Double) -> String {
+        let minutes = Int(time) / 60
+        let seconds = Int(time) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
 }
