@@ -133,10 +133,21 @@ class LibraryService {
     }
 }
 
-enum YouTubeError: Error {
+enum YouTubeError: LocalizedError {
     case toolNotFound
     case downloadFailed(String)
     case invalidURL
+
+    var errorDescription: String? {
+        switch self {
+        case .toolNotFound:
+            return "yt-dlp command line tool was not found. Please install it (e.g., via Homebrew) and ensure it's in your PATH."
+        case .downloadFailed(let message):
+            return "Download failed: \(message)"
+        case .invalidURL:
+            return "The provided URL is invalid."
+        }
+    }
 }
 
 class YouTubeService {
@@ -184,7 +195,7 @@ class YouTubeService {
             throw YouTubeError.toolNotFound
         }
 
-        let outputFolder = FileManager.default.temporaryDirectory.appendingPathComponent("OrMiMu_Downloads")
+        let outputFolder = FileManager.default.urls(for: .musicDirectory, in: .userDomainMask).first?.appendingPathComponent("OrMiMu") ?? FileManager.default.temporaryDirectory.appendingPathComponent("OrMiMu_Downloads")
         try? FileManager.default.createDirectory(at: outputFolder, withIntermediateDirectories: true)
 
         let outputTemplate = outputFolder.path + "/%(title)s.%(ext)s"
