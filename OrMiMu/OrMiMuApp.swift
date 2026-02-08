@@ -13,6 +13,8 @@ struct OrMiMuApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             MusicPath.self,
+            SongItem.self,
+            PlaylistItem.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -28,5 +30,9 @@ struct OrMiMuApp: App {
             ContentView()
         }
         .modelContainer(sharedModelContainer)
+
+        Settings {
+            SettingsView()
+        }
     }
 }

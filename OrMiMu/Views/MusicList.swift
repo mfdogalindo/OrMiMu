@@ -7,79 +7,209 @@
 
 import SwiftUI
 import SwiftData
-import AVFoundation
 
-struct MusicListView: View {
-    let paths: [MusicPath]
-    @Binding var selected : MusicPath.ID?
-    @Binding var playableSong: URL?
-    @State var tableData: [Song] = []
+enum SongField {
+    case title, artist, album, genre
 
-    var body: some View{
-        if let selectedPath = paths.first(where: {$0.id == selected}){
-            Table(tableData){
-                TableColumn("Path", value:  \.path)
-                TableColumn("Archivo") { file in
-                    HStack{
-                        Text(file.name)
-                        Spacer()
-                    }
-                    .onTapGesture{
-                        playableSong = file.url
-                    }
-                }
-                TableColumn("Title", value: \.tags.title)
-                TableColumn("Artist", value: \.tags.artist)
-                TableColumn("Genre", value: \.tags.genre)
-            }
-            .task{
-                tableData = []
-                let newData = await getTags(folder: selectedPath)
-                tableData = newData
-            }
-        }
-        else{
-            Text("Select an folder")
+    var displayName: String {
+        switch self {
+        case .title: return "Title"
+        case .artist: return "Artist"
+        case .album: return "Album"
+        case .genre: return "Genre"
         }
     }
-    
-    func getID3Tag(url: URL) async -> Tags {
+}
 
-            var newTag : Tags = Tags(title: "", artist: "", genre: "");
-            do{
-                if let asset = AVAsset (url: url) as? AVURLAsset {
-                    let metadata = try await asset.load(.metadata)
-                   for item in metadata {
-                        if let value =  try await item.load(.value) {
-                            switch item.commonKey?.rawValue {
-                            case "title":
-                                newTag.title = "\(value)"
-                            case "artist":
-                                newTag.artist = "\(value)"
-                            case "type":
-                                  newTag.genre = "\(value)"
-                            default:
-                                break
+struct MusicListView: View {
+    var songs: [SongItem]
+    @Binding var playableSong: URL?
+    var currentPlaylist: PlaylistItem? = nil
+
+    @Query private var playlists: [PlaylistItem]
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var audioPlayerManager: AudioPlayerManager
+
+    @State private var selectedSongIDs = Set<SongItem.ID>()
+
+    // Metadata Editing State
+    @State private var songToEdit: SongItem?
+    @State private var editingField: SongField?
+
+    var body: some View {
+        Table(songs, selection: $selectedSongIDs) {
+            TableColumn("Title") { song in
+                Text(song.title)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        editSong(song, field: .title)
+                    }
+            }
+            TableColumn("Artist") { song in
+                Text(song.artist)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        editSong(song, field: .artist)
+                    }
+            }
+            TableColumn("Album") { song in
+                Text(song.album)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        editSong(song, field: .album)
+                    }
+            }
+            TableColumn("Genre") { song in
+                Text(song.genre)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        editSong(song, field: .genre)
+                    }
+            }
+            TableColumn("Length") { song in
+                Text(formatDuration(song.duration))
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        playSong(song)
+                    }
+            }
+        }
+        .contextMenu(forSelectionType: SongItem.ID.self) { selectedIDs in
+            if !selectedIDs.isEmpty {
+                Button("Play") {
+                    if let firstID = selectedIDs.first, let song = songs.first(where: { $0.id == firstID }) {
+                        playSong(song)
+                    }
+                }
+                Divider()
+
+                if let currentPlaylist = currentPlaylist {
+                    Button("Remove from Playlist") {
+                        removeFromPlaylist(playlist: currentPlaylist, songIDs: selectedIDs)
+                    }
+                } else {
+                    Menu("Add to Playlist") {
+                        ForEach(playlists) { playlist in
+                            Button(playlist.name) {
+                                addToPlaylist(playlist: playlist, songIDs: selectedIDs)
                             }
+                        }
+                        Divider()
+                        Button("New Playlist") {
+                            createNewPlaylist(with: selectedIDs)
                         }
                     }
                 }
+
+                Divider()
+
+                Button("Delete from Library") {
+                    deleteFromLibrary(songIDs: selectedIDs)
+                }
             }
-            catch {
-                print(error)
-            }
-        return newTag;
-    }
-    
-    func getTags(folder: MusicPath) async -> [Song] {
-        var result : [Song] = []
-        for file in folder.mp3Files {
-            let filePath = folder.path+"/"+file
-            let url = URL(fileURLWithPath: filePath)
-            let tags: Tags = await getID3Tag(url: url)
-            result.append(Song(name: file, path: filePath, tags: tags, url: url))
         }
-        return result
+        .sheet(item: $songToEdit) { song in
+            EditMetadataView(song: song, initialField: editingField)
+        }
+    }
+
+    private func editSong(_ song: SongItem, field: SongField) {
+        editingField = field
+        songToEdit = song
     }
     
+    private func playSong(_ song: SongItem) {
+        let queueItems = songs.map { (url: URL(fileURLWithPath: $0.filePath), title: $0.title, artist: $0.artist) }
+        if let index = songs.firstIndex(where: { $0.id == song.id }) {
+            audioPlayerManager.setQueue(queueItems, startAtIndex: index)
+            playableSong = URL(fileURLWithPath: song.filePath)
+        }
+    }
+
+    private func addToPlaylist(playlist: PlaylistItem, songIDs: Set<SongItem.ID>) {
+        let selectedSongs = songs.filter { songIDs.contains($0.id) }
+        if playlist.songs == nil { playlist.songs = [] }
+        playlist.songs?.append(contentsOf: selectedSongs)
+    }
+    
+    private func removeFromPlaylist(playlist: PlaylistItem, songIDs: Set<SongItem.ID>) {
+        guard var existingSongs = playlist.songs else { return }
+        playlist.songs = existingSongs.filter { !songIDs.contains($0.id) }
+    }
+
+    private func createNewPlaylist(with songIDs: Set<SongItem.ID>) {
+        let selectedSongs = songs.filter { songIDs.contains($0.id) }
+        let newPlaylist = PlaylistItem(name: "New Playlist", songs: selectedSongs)
+        modelContext.insert(newPlaylist)
+    }
+
+    private func deleteFromLibrary(songIDs: Set<SongItem.ID>) {
+        let songsToDelete = songs.filter { songIDs.contains($0.id) }
+        for song in songsToDelete {
+            modelContext.delete(song)
+        }
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
+        let minutes = Int(seconds) / 60
+        let seconds = Int(seconds) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+struct EditMetadataView: View {
+    var song: SongItem
+    var initialField: SongField?
+
+    @Environment(\.dismiss) private var dismiss
+
+    // Using separate state to allow cancel
+    @State private var title: String = ""
+    @State private var artist: String = ""
+    @State private var album: String = ""
+    @State private var genre: String = ""
+
+    @FocusState private var focusedField: SongField?
+
+    var body: some View {
+        Form {
+            TextField("Title", text: $title)
+                .focused($focusedField, equals: .title)
+            TextField("Artist", text: $artist)
+                .focused($focusedField, equals: .artist)
+            TextField("Album", text: $album)
+                .focused($focusedField, equals: .album)
+            TextField("Genre", text: $genre)
+                .focused($focusedField, equals: .genre)
+
+            HStack {
+                Button("Cancel") {
+                    dismiss()
+                }
+                Spacer()
+                Button("Save") {
+                    save()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(.top)
+        }
+        .padding()
+        .frame(minWidth: 300)
+        .onAppear {
+            title = song.title
+            artist = song.artist
+            album = song.album
+            genre = song.genre
+            focusedField = initialField
+        }
+    }
+
+    private func save() {
+        song.title = title
+        song.artist = artist
+        song.album = album
+        song.genre = genre
+        dismiss()
+    }
 }
