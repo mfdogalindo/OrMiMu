@@ -77,8 +77,18 @@ class LibraryService {
                     statusManager?.statusMessage = "Processing: \(fileURL.lastPathComponent)"
                 }
 
-                // Check if exists logic could go here, but for now we insert.
-                // Ideally we should check if filePath already exists in DB.
+                let filePath = fileURL.path
+                let descriptor = FetchDescriptor<SongItem>(
+                    predicate: #Predicate { $0.filePath == filePath }
+                )
+
+                // Check if already exists
+                if let existingCount = try? modelContext.fetchCount(descriptor), existingCount > 0 {
+                    await MainActor.run {
+                        statusManager?.statusMessage = "Skipping duplicate: \(fileURL.lastPathComponent)"
+                    }
+                    continue
+                }
 
                 let tags = await getID3Tag(url: fileURL)
                 let duration = await getDuration(url: fileURL)
