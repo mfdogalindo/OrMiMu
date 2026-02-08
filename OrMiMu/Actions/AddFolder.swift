@@ -207,7 +207,10 @@ class LibraryService {
                 // Fallback to identifier for ID3 tags if not found via commonKey
                 if !handled, let identifier = item.identifier?.rawValue {
                      // Genre: ID3 TCON, iTunes ©gen, iTunes gnre
-                     if newTag.genre.isEmpty && (identifier.contains("id3/TCON") || identifier.contains("genre") || identifier.contains("©gen") || identifier.contains("gnre")) {
+                     // Prioritize text-based genres (©gen, TCON) over numeric/index based (gnre)
+                     if identifier.contains("id3/TCON") || identifier.contains("genre") || identifier.contains("©gen") {
+                         newTag.genre = "\(value)"
+                     } else if newTag.genre.isEmpty && identifier.contains("gnre") {
                          newTag.genre = "\(value)"
                      }
                      // Title: ID3 TIT2, iTunes ©nam
