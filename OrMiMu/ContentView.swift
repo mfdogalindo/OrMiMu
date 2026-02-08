@@ -11,67 +11,87 @@ import AVFoundation
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [MusicPath]
-    @State private var selected: MusicPath.ID?
+    @Query private var allSongs: [SongItem]
     @State private var playableSong: URL? = nil
-
-    private var addFolder: AddFolder = AddFolder.init();
+    @State private var selectedTab: SidebarItem? = .library
     
+    // For Playlists navigation
+    @State private var playlistPath = NavigationPath()
+    @State private var selectedPlaylist: PlaylistItem?
+
+    enum SidebarItem: Hashable, Identifiable {
+        case library
+        case playlists
+        case download
+
+        var id: Self { self }
+    }
+
     var body: some View {
         NavigationSplitView {
-            List(items, selection: $selected) { item in
-                Text(item.name)
-                    .contextMenu { self.contextMenuFolderView(path: item) }
+            List(selection: $selectedTab) {
+                NavigationLink(value: SidebarItem.library) {
+                    Label("Library", systemImage: "music.note")
+                }
+                NavigationLink(value: SidebarItem.playlists) {
+                    Label("Playlists", systemImage: "music.note.list")
+                }
+                NavigationLink(value: SidebarItem.download) {
+                    Label("Download", systemImage: "arrow.down.circle")
+                }
             }
-            .navigationSplitViewColumnWidth(min: 220, ideal: 250)
+            .listStyle(.sidebar)
+            .navigationTitle("OrMiMu")
             .toolbar {
-                ToolbarItem {
-                    Button(action: addFolders) {
-                        Label("Add Item", systemImage: "plus")
+                if selectedTab == .library {
+                    ToolbarItem {
+                        Button(action: addFolder) {
+                            Label("Add Folder", systemImage: "folder.badge.plus")
+                        }
                     }
                 }
             }
         } detail: {
-            DetailView()
+            switch selectedTab {
+            case .library:
+                MusicListView(songs: allSongs, playableSong: $playableSong)
+                    .navigationTitle("Library")
+            case .playlists:
+                NavigationStack(path: $playlistPath) {
+                    PlaylistListView(selectedPlaylist: $selectedPlaylist)
+                        .navigationDestination(for: PlaylistItem.self) { playlist in
+                            PlaylistDetailView(playlist: playlist, playableSong: $playableSong)
+                        }
+                }
+            case .download:
+                YouTubeDownloadView()
+            case .none, .some:
+                Text("Select an item")
+            }
         }
-    }
-    
-    private func DetailView() -> some View {
-        VStack{
-            MusicListView(paths: items, selected: $selected, playableSong: $playableSong)
-                .id(selected)
-            if(playableSong != nil){
-                MusicPlayer(playableSong: $playableSong).id(playableSong)
+        .overlay(alignment: .bottom) {
+            if playableSong != nil {
+                MusicPlayer(playableSong: $playableSong)
+                    .frame(height: 80)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(10)
+                    .padding()
             }
         }
     }
 
-    
-    private func contextMenuFolderView(path: MusicPath) -> some View {
-        VStack {
-            Button(action: {
-                let fileURL = URL(fileURLWithPath: path.path)
-                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-            }) {
-                Text("Show in Finder")
-                Image(systemName: "folder")
-            }
-            Button(action: {
-                modelContext.delete(path);
-            }) {
-                Text("Delete Item")
-                Image(systemName: "trash")
-            }
-        }
-    }
+    private func addFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
 
-
-    private func addFolders() {
-        withAnimation {
-            let folder = addFolder.selectFolder();
-            if(folder != nil){
-                print(folder?.mp3Files as Any)
-                modelContext.insert(folder!);
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                let service = LibraryService(modelContext: modelContext)
+                Task {
+                    await service.scanFolder(at: url)
+                }
             }
         }
     }
@@ -79,5 +99,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+        .modelContainer(for: [SongItem.self, PlaylistItem.self], inMemory: true)
 }

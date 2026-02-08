@@ -7,79 +7,77 @@
 
 import SwiftUI
 import SwiftData
-import AVFoundation
 
 struct MusicListView: View {
-    let paths: [MusicPath]
-    @Binding var selected : MusicPath.ID?
+    var songs: [SongItem]
     @Binding var playableSong: URL?
-    @State var tableData: [Song] = []
+    var currentPlaylist: PlaylistItem? = nil
 
-    var body: some View{
-        if let selectedPath = paths.first(where: {$0.id == selected}){
-            Table(tableData){
-                TableColumn("Path", value:  \.path)
-                TableColumn("Archivo") { file in
-                    HStack{
-                        Text(file.name)
-                        Spacer()
-                    }
-                    .onTapGesture{
-                        playableSong = file.url
+    @Query private var playlists: [PlaylistItem]
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var selectedSongIDs = Set<SongItem.ID>()
+
+    var body: some View {
+        Table(songs, selection: $selectedSongIDs) {
+            TableColumn("Title", value: \.title)
+            TableColumn("Artist", value: \.artist)
+            TableColumn("Album", value: \.album)
+            TableColumn("Genre", value: \.genre)
+            TableColumn("Length") { song in
+                Text(formatDuration(song.duration))
+            }
+        }
+        .contextMenu(forSelectionType: SongItem.ID.self) { selectedIDs in
+            if !selectedIDs.isEmpty {
+                Button("Play") {
+                    if let firstID = selectedIDs.first, let song = songs.first(where: { $0.id == firstID }) {
+                        playableSong = URL(fileURLWithPath: song.filePath)
                     }
                 }
-                TableColumn("Title", value: \.tags.title)
-                TableColumn("Artist", value: \.tags.artist)
-                TableColumn("Genre", value: \.tags.genre)
-            }
-            .task{
-                tableData = []
-                let newData = await getTags(folder: selectedPath)
-                tableData = newData
-            }
-        }
-        else{
-            Text("Select an folder")
-        }
-    }
-    
-    func getID3Tag(url: URL) async -> Tags {
+                Divider()
 
-            var newTag : Tags = Tags(title: "", artist: "", genre: "");
-            do{
-                if let asset = AVAsset (url: url) as? AVURLAsset {
-                    let metadata = try await asset.load(.metadata)
-                   for item in metadata {
-                        if let value =  try await item.load(.value) {
-                            switch item.commonKey?.rawValue {
-                            case "title":
-                                newTag.title = "\(value)"
-                            case "artist":
-                                newTag.artist = "\(value)"
-                            case "type":
-                                  newTag.genre = "\(value)"
-                            default:
-                                break
+                if let currentPlaylist = currentPlaylist {
+                    Button("Remove from Playlist") {
+                        removeFromPlaylist(playlist: currentPlaylist, songIDs: selectedIDs)
+                    }
+                } else {
+                    Menu("Add to Playlist") {
+                        ForEach(playlists) { playlist in
+                            Button(playlist.name) {
+                                addToPlaylist(playlist: playlist, songIDs: selectedIDs)
                             }
+                        }
+                        Divider()
+                        Button("New Playlist") {
+                            createNewPlaylist(with: selectedIDs)
                         }
                     }
                 }
             }
-            catch {
-                print(error)
-            }
-        return newTag;
-    }
-    
-    func getTags(folder: MusicPath) async -> [Song] {
-        var result : [Song] = []
-        for file in folder.mp3Files {
-            let filePath = folder.path+"/"+file
-            let url = URL(fileURLWithPath: filePath)
-            let tags: Tags = await getID3Tag(url: url)
-            result.append(Song(name: file, path: filePath, tags: tags, url: url))
         }
-        return result
     }
     
+    private func addToPlaylist(playlist: PlaylistItem, songIDs: Set<SongItem.ID>) {
+        let selectedSongs = songs.filter { songIDs.contains($0.id) }
+        if playlist.songs == nil { playlist.songs = [] }
+        playlist.songs?.append(contentsOf: selectedSongs)
+    }
+    
+    private func removeFromPlaylist(playlist: PlaylistItem, songIDs: Set<SongItem.ID>) {
+        guard var existingSongs = playlist.songs else { return }
+        playlist.songs = existingSongs.filter { !songIDs.contains($0.id) }
+    }
+
+    private func createNewPlaylist(with songIDs: Set<SongItem.ID>) {
+        let selectedSongs = songs.filter { songIDs.contains($0.id) }
+        let newPlaylist = PlaylistItem(name: "New Playlist", songs: selectedSongs)
+        modelContext.insert(newPlaylist)
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
+        let minutes = Int(seconds) / 60
+        let seconds = Int(seconds) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
 }
