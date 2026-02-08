@@ -66,6 +66,10 @@ struct MusicListView: View {
                         editSong(song, field: .genre)
                     }
             }
+            TableColumn("Format") { song in
+                Text(song.fileExtension)
+                    .contentShape(Rectangle())
+            }
             TableColumn("Length") { song in
                 Text(formatDuration(song.duration))
                     .contentShape(Rectangle())
@@ -76,6 +80,12 @@ struct MusicListView: View {
         }
         .contextMenu(forSelectionType: SongItem.ID.self) { selectedIDs in
             if !selectedIDs.isEmpty {
+                Button("Convert to Default Format") {
+                    if let firstID = selectedIDs.first, let song = songs.first(where: { $0.id == firstID }) {
+                        convertToDefaultFormat(song)
+                    }
+                }
+
                 Button("Play") {
                     if let firstID = selectedIDs.first, let song = songs.first(where: { $0.id == firstID }) {
                         playSong(song)
@@ -141,6 +151,28 @@ struct MusicListView: View {
         let selectedSongs = songs.filter { songIDs.contains($0.id) }
         let newPlaylist = PlaylistItem(name: "New Playlist", songs: selectedSongs)
         modelContext.insert(newPlaylist)
+    }
+
+    private func convertToDefaultFormat(_ song: SongItem) {
+        let defaultFormat = UserDefaults.standard.string(forKey: "downloadFormat") ?? "mp3"
+        let defaultBitrate = UserDefaults.standard.string(forKey: "downloadBitrate") ?? "256"
+
+        // Prevent unnecessary conversion if already same format (rough check)
+        if song.fileExtension.lowercased() == defaultFormat.lowercased() {
+             // Maybe show alert? For now just skip.
+             return
+        }
+
+        Task {
+            do {
+                try await ConversionService.convert(song: song, to: defaultFormat, bitrate: defaultBitrate)
+                // Refresh specific song metadata/path if needed, or re-fetch
+                // Since `convert` will likely update the `song` object properties (filePath),
+                // the UI should update automatically if observed.
+            } catch {
+                print("Conversion failed: \(error)")
+            }
+        }
     }
 
     private func deleteFromLibrary(songIDs: Set<SongItem.ID>) {

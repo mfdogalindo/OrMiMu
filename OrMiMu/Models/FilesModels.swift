@@ -49,6 +49,11 @@ final class SongItem: Identifiable {
     var duration: Double
     var dateAdded: Date
 
+    @Transient
+    var fileExtension: String {
+        return (filePath as NSString).pathExtension.uppercased()
+    }
+
     // Relationship to Playlist
     var playlists: [PlaylistItem]?
 

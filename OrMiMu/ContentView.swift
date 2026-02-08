@@ -140,6 +140,7 @@ struct ContentView: View {
                 let service = LibraryService(modelContext: modelContext, statusManager: statusManager)
                 Task {
                     await service.scanFolder(at: url)
+                    await service.refreshMetadata(for: allSongs)
                 }
             }
         }
