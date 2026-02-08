@@ -33,12 +33,21 @@ struct MusicListView: View {
 
     @State private var selectedSongIDs = Set<SongItem.ID>()
 
+    // Sorting State
+    @AppStorage("librarySortKey") private var sortKey: String = "title"
+    @AppStorage("librarySortAscending") private var sortAscending: Bool = true
+    @State private var sortOrder = [KeyPathComparator(\SongItem.title)]
+
     // Metadata Editing State
     @State private var songToEdit: SongItem?
     @State private var editingField: SongField?
 
+    var sortedSongs: [SongItem] {
+        return songs.sorted(using: sortOrder)
+    }
+
     var body: some View {
-        Table(songs, selection: $selectedSongIDs) {
+        Table(sortedSongs, selection: $selectedSongIDs, sortOrder: $sortOrder) {
             TableColumn("") { song in
                 if let playableSong = playableSong, playableSong.path == song.filePath {
                     Image(systemName: "waveform")
@@ -56,45 +65,51 @@ struct MusicListView: View {
             }
             .width(20)
 
-            TableColumn("Title") { song in
+            TableColumn("Title", value: \.title) { song in
                 Text(song.title)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
                         editSong(song, field: .title)
                     }
             }
-            TableColumn("Artist") { song in
+            TableColumn("Artist", value: \.artist) { song in
                 Text(song.artist)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
                         editSong(song, field: .artist)
                     }
             }
-            TableColumn("Album") { song in
+            TableColumn("Album", value: \.album) { song in
                 Text(song.album)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
                         editSong(song, field: .album)
                     }
             }
-            TableColumn("Genre") { song in
+            TableColumn("Genre", value: \.genre) { song in
                 Text(song.genre)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
                         editSong(song, field: .genre)
                     }
             }
-            TableColumn("Format") { song in
+            TableColumn("Format", value: \.fileExtension) { song in
                 Text(song.fileExtension)
                     .contentShape(Rectangle())
             }
-            TableColumn("Length") { song in
+            TableColumn("Length", value: \.duration) { song in
                 Text(formatDuration(song.duration))
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
                         playSong(song)
                     }
             }
+        }
+        .onChange(of: sortOrder) { _, newOrder in
+            saveSortOrder(newOrder)
+        }
+        .onAppear {
+            updateSortOrder()
         }
         .contextMenu(forSelectionType: SongItem.ID.self) { selectedIDs in
             if !selectedIDs.isEmpty {
@@ -146,16 +161,42 @@ struct MusicListView: View {
         songToEdit = song
     }
     
+    private func updateSortOrder() {
+        let order: SortOrder = sortAscending ? .forward : .reverse
+        switch sortKey {
+        case "title": sortOrder = [KeyPathComparator(\SongItem.title, order: order)]
+        case "artist": sortOrder = [KeyPathComparator(\SongItem.artist, order: order)]
+        case "album": sortOrder = [KeyPathComparator(\SongItem.album, order: order)]
+        case "genre": sortOrder = [KeyPathComparator(\SongItem.genre, order: order)]
+        case "fileExtension": sortOrder = [KeyPathComparator(\SongItem.fileExtension, order: order)]
+        case "duration": sortOrder = [KeyPathComparator(\SongItem.duration, order: order)]
+        default: sortOrder = [KeyPathComparator(\SongItem.title, order: order)]
+        }
+    }
+
+    private func saveSortOrder(_ newOrder: [KeyPathComparator<SongItem>]) {
+        guard let first = newOrder.first else { return }
+        sortAscending = first.order == .forward
+
+        if first.keyPath == \SongItem.title { sortKey = "title" }
+        else if first.keyPath == \SongItem.artist { sortKey = "artist" }
+        else if first.keyPath == \SongItem.album { sortKey = "album" }
+        else if first.keyPath == \SongItem.genre { sortKey = "genre" }
+        else if first.keyPath == \SongItem.fileExtension { sortKey = "fileExtension" }
+        else if first.keyPath == \SongItem.duration { sortKey = "duration" }
+    }
+
     private func playSong(_ song: SongItem) {
-        let queueItems = songs.map { (url: URL(fileURLWithPath: $0.filePath), title: $0.title, artist: $0.artist) }
-        if let index = songs.firstIndex(where: { $0.id == song.id }) {
+        // Use sortedSongs for correct queue order
+        let queueItems = sortedSongs.map { (url: URL(fileURLWithPath: $0.filePath), title: $0.title, artist: $0.artist) }
+        if let index = sortedSongs.firstIndex(where: { $0.id == song.id }) {
             audioPlayerManager.setQueue(queueItems, startAtIndex: index)
             playableSong = URL(fileURLWithPath: song.filePath)
         }
     }
 
     private func addToPlaylist(playlist: PlaylistItem, songIDs: Set<SongItem.ID>) {
-        let selectedSongs = songs.filter { songIDs.contains($0.id) }
+        let selectedSongs = sortedSongs.filter { songIDs.contains($0.id) }
         if playlist.songs == nil { playlist.songs = [] }
         playlist.songs?.append(contentsOf: selectedSongs)
     }
@@ -166,7 +207,7 @@ struct MusicListView: View {
     }
 
     private func createNewPlaylist(with songIDs: Set<SongItem.ID>) {
-        let selectedSongs = songs.filter { songIDs.contains($0.id) }
+        let selectedSongs = sortedSongs.filter { songIDs.contains($0.id) }
         let newPlaylist = PlaylistItem(name: "New Playlist", songs: selectedSongs)
         modelContext.insert(newPlaylist)
     }
@@ -198,7 +239,7 @@ struct MusicListView: View {
     }
 
     private func deleteFromLibrary(songIDs: Set<SongItem.ID>) {
-        let songsToDelete = songs.filter { songIDs.contains($0.id) }
+        let songsToDelete = sortedSongs.filter { songIDs.contains($0.id) }
         for song in songsToDelete {
             modelContext.delete(song)
         }
