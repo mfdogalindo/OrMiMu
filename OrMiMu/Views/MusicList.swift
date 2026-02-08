@@ -10,7 +10,7 @@ import SwiftData
 
 struct MusicListView: View {
     var songs: [SongItem]
-    @Binding var playableSong: URL?
+    @ObservedObject var audioManager: AudioPlayerManager
     var currentPlaylist: PlaylistItem? = nil
 
     @Query private var playlists: [PlaylistItem]
@@ -31,9 +31,7 @@ struct MusicListView: View {
         .contextMenu(forSelectionType: SongItem.ID.self) { selectedIDs in
             if !selectedIDs.isEmpty {
                 Button("Play") {
-                    if let firstID = selectedIDs.first, let song = songs.first(where: { $0.id == firstID }) {
-                        playableSong = URL(fileURLWithPath: song.filePath)
-                    }
+                    playSelectedSong(selectedIDs: selectedIDs)
                 }
                 Divider()
 
@@ -55,6 +53,20 @@ struct MusicListView: View {
                     }
                 }
             }
+        }
+        // Double click handler
+        // Using onChange of selection is not enough for double click.
+        // Attaching gesture to Table might work if selection is updated first.
+        .simultaneousGesture(TapGesture(count: 2).onEnded {
+            if !selectedSongIDs.isEmpty {
+                playSelectedSong(selectedIDs: selectedSongIDs)
+            }
+        })
+    }
+
+    private func playSelectedSong(selectedIDs: Set<SongItem.ID>) {
+        if let firstID = selectedIDs.first, let song = songs.first(where: { $0.id == firstID }) {
+            audioManager.playAudio(from: URL(fileURLWithPath: song.filePath))
         }
     }
     

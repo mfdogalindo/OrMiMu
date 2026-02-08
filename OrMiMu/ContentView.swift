@@ -12,7 +12,7 @@ import AVFoundation
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var allSongs: [SongItem]
-    @State private var playableSong: URL? = nil
+    @StateObject private var audioManager = AudioPlayerManager()
     @State private var selectedTab: SidebarItem? = .library
     
     // For Playlists navigation
@@ -54,13 +54,13 @@ struct ContentView: View {
         } detail: {
             switch selectedTab {
             case .library:
-                MusicListView(songs: allSongs, playableSong: $playableSong)
+                MusicListView(songs: allSongs, audioManager: audioManager)
                     .navigationTitle("Library")
             case .playlists:
                 NavigationStack(path: $playlistPath) {
-                    PlaylistListView(selectedPlaylist: $selectedPlaylist)
+                    PlaylistListView(selectedPlaylist: $selectedPlaylist, audioManager: audioManager)
                         .navigationDestination(for: PlaylistItem.self) { playlist in
-                            PlaylistDetailView(playlist: playlist, playableSong: $playableSong)
+                            PlaylistDetailView(playlist: playlist, audioManager: audioManager)
                         }
                 }
             case .download:
@@ -70,11 +70,9 @@ struct ContentView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if playableSong != nil {
-                MusicPlayer(playableSong: $playableSong)
-                    .frame(height: 80)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(10)
+            if audioManager.currentSongURL != nil {
+                MusicPlayer(audioManager: audioManager)
+                    .frame(height: 100)
                     .padding()
             }
         }
@@ -102,6 +100,7 @@ struct ContentView: View {
 struct PlaylistListView: View {
     @Query(sort: \PlaylistItem.name) private var playlists: [PlaylistItem]
     @Binding var selectedPlaylist: PlaylistItem?
+    @ObservedObject var audioManager: AudioPlayerManager
     @Environment(\.modelContext) private var modelContext
     @State private var showSmartPlaylistSheet = false
 
@@ -149,12 +148,12 @@ struct PlaylistListView: View {
 
 struct PlaylistDetailView: View {
     @Bindable var playlist: PlaylistItem
-    @Binding var playableSong: URL?
+    @ObservedObject var audioManager: AudioPlayerManager
 
     var body: some View {
         VStack {
             if let songs = playlist.songs, !songs.isEmpty {
-                MusicListView(songs: songs, playableSong: $playableSong, currentPlaylist: playlist)
+                MusicListView(songs: songs, audioManager: audioManager, currentPlaylist: playlist)
             } else {
                 VStack {
                     Image(systemName: "music.note.list")
@@ -269,6 +268,12 @@ struct YouTubeDownloadView: View {
     @State private var genre: String = ""
     @State private var year: String = ""
 
+    @State private var selectedFormat = "mp3"
+    @State private var selectedQuality = "192K"
+
+    let formats = ["mp3", "m4a", "opus", "wav"]
+    let qualities = ["64K", "128K", "192K", "256K", "320K"]
+
     @State private var isDownloading = false
     @State private var statusMessage: String = ""
 
@@ -292,6 +297,22 @@ struct YouTubeDownloadView: View {
 
             Section("Video URL") {
                 TextField("https://...", text: $urlString)
+            }
+
+            Section("Settings") {
+                Picker("Format", selection: $selectedFormat) {
+                    ForEach(formats, id: \.self) { format in
+                        Text(format.uppercased()).tag(format)
+                    }
+                }
+
+                if selectedFormat == "mp3" || selectedFormat == "m4a" || selectedFormat == "opus" {
+                    Picker("Quality (Bitrate)", selection: $selectedQuality) {
+                        ForEach(qualities, id: \.self) { quality in
+                            Text(quality).tag(quality)
+                        }
+                    }
+                }
             }
 
             Section("Metadata Override (Optional)") {
@@ -363,7 +384,9 @@ struct YouTubeDownloadView: View {
                     artist: artist.isEmpty ? nil : artist,
                     album: album.isEmpty ? nil : album,
                     genre: genre.isEmpty ? nil : genre,
-                    year: year.isEmpty ? nil : year
+                    year: year.isEmpty ? nil : year,
+                    audioFormat: selectedFormat,
+                    audioQuality: selectedQuality
                 )
 
                 await MainActor.run {

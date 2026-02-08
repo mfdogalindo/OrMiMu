@@ -220,7 +220,7 @@ class YouTubeService {
         return nil
     }
 
-    func download(url: URL, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil) async throws -> String {
+    func download(url: URL, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil, audioFormat: String = "mp3", audioQuality: String = "192K") async throws -> String {
         guard let ytDlpPath = getExecutablePath() else {
             throw YouTubeError.toolNotFound
         }
@@ -230,12 +230,6 @@ class YouTubeService {
 
         let outputTemplate = outputFolder.path + "/%(title)s.%(ext)s"
 
-        // Use bestaudio format, which is often opus/m4a, and let yt-dlp select container if possible.
-        // Or specify m4a explicitly if we don't have ffmpeg for mp3 conversion.
-        // However, user requested mp3 initially.
-        // If ffmpeg is missing, -x --audio-format mp3 might fail.
-        // Let's try to detect if ffmpeg is available.
-
         let ffmpegAvailable = hasFFmpeg()
 
         var arguments: [String] = []
@@ -243,14 +237,14 @@ class YouTubeService {
         if ffmpegAvailable {
             arguments = [
                 "-x",
-                "--audio-format", "mp3",
+                "--audio-format", audioFormat,
+                "--audio-quality", audioQuality,
                 "-o", outputTemplate,
                 "--no-playlist",
                 url.absoluteString
             ]
         } else {
             // Fallback to best audio (usually m4a or webm) if no ffmpeg
-            // We can't force mp3 without ffmpeg easily.
             print("FFmpeg not found. Downloading best audio format available.")
             arguments = [
                 "-f", "bestaudio[ext=m4a]/bestaudio",
