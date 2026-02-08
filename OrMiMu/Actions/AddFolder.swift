@@ -161,21 +161,52 @@ class LibraryService {
         do {
             let metadata = try await asset.load(.metadata)
             for item in metadata {
-                guard let key = item.commonKey?.rawValue, let value = try await item.load(.value) else { continue }
+                let value = try await item.load(.value)
+                guard let value = value else { continue }
 
-                switch key {
-                case "title":
-                    newTag.title = "\(value)"
-                case "artist":
-                    newTag.artist = "\(value)"
-                case "albumName":
-                    newTag.album = "\(value)"
-                case "genre":
-                    newTag.genre = "\(value)"
-                case "creationDate":
-                    newTag.year = "\(value)"
-                default:
-                    break
+                var handled = false
+
+                // Prioritize commonKey
+                if let key = item.commonKey?.rawValue {
+                    switch key {
+                    case "title":
+                        newTag.title = "\(value)"
+                        handled = true
+                    case "artist":
+                        newTag.artist = "\(value)"
+                        handled = true
+                    case "albumName":
+                        newTag.album = "\(value)"
+                        handled = true
+                    case "genre":
+                        newTag.genre = "\(value)"
+                        handled = true
+                    case "creationDate":
+                        newTag.year = "\(value)"
+                        handled = true
+                    default:
+                        break
+                    }
+                }
+
+                // Fallback to identifier for ID3 tags if not found via commonKey
+                if !handled, let identifier = item.identifier?.rawValue {
+                     // AVMetadataIdentifier.id3MetadataContentType (TCON)
+                     if newTag.genre.isEmpty && (identifier.contains("id3/TCON") || identifier.contains("genre")) {
+                         newTag.genre = "\(value)"
+                     }
+                     // AVMetadataIdentifier.id3MetadataTitleDescription (TIT2)
+                     if newTag.title.isEmpty && (identifier.contains("id3/TIT2") || identifier.contains("title")) {
+                         newTag.title = "\(value)"
+                     }
+                     // AVMetadataIdentifier.id3MetadataLeadPerformer (TPE1)
+                     if newTag.artist.isEmpty && (identifier.contains("id3/TPE1") || identifier.contains("artist")) {
+                         newTag.artist = "\(value)"
+                     }
+                     // AVMetadataIdentifier.id3MetadataAlbumTitle (TALB)
+                     if newTag.album.isEmpty && (identifier.contains("id3/TALB") || identifier.contains("album")) {
+                         newTag.album = "\(value)"
+                     }
                 }
             }
         } catch {

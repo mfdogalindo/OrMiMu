@@ -59,8 +59,10 @@ class MetadataService {
             if process.terminationStatus == 0 {
                 // Success: Safely replace original with temp
                 do {
-                    // replaceItemAt guarantees atomic replacement on compliant file systems
-                    _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL, backupItemName: nil, options: .usingNewMetadataOnly)
+                    // Use empty options for standard atomic replacement.
+                    // DO NOT use .usingNewMetadataOnly as it preserves the old file content (data fork),
+                    // effectively discarding the ID3 tag updates we just wrote to the temp file.
+                    _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL, backupItemName: nil, options: [])
                 } catch {
                     // If replacement fails, clean up temp
                     try? FileManager.default.removeItem(at: tempURL)
