@@ -206,20 +206,20 @@ class LibraryService {
 
                 // Fallback to identifier for ID3 tags if not found via commonKey
                 if !handled, let identifier = item.identifier?.rawValue {
-                     // AVMetadataIdentifier.id3MetadataContentType (TCON)
-                     if newTag.genre.isEmpty && (identifier.contains("id3/TCON") || identifier.contains("genre")) {
+                     // Genre: ID3 TCON, iTunes ©gen, iTunes gnre
+                     if newTag.genre.isEmpty && (identifier.contains("id3/TCON") || identifier.contains("genre") || identifier.contains("©gen") || identifier.contains("gnre")) {
                          newTag.genre = "\(value)"
                      }
-                     // AVMetadataIdentifier.id3MetadataTitleDescription (TIT2)
-                     if newTag.title.isEmpty && (identifier.contains("id3/TIT2") || identifier.contains("title")) {
+                     // Title: ID3 TIT2, iTunes ©nam
+                     if newTag.title.isEmpty && (identifier.contains("id3/TIT2") || identifier.contains("title") || identifier.contains("©nam")) {
                          newTag.title = "\(value)"
                      }
-                     // AVMetadataIdentifier.id3MetadataLeadPerformer (TPE1)
-                     if newTag.artist.isEmpty && (identifier.contains("id3/TPE1") || identifier.contains("artist")) {
+                     // Artist: ID3 TPE1, iTunes ©ART
+                     if newTag.artist.isEmpty && (identifier.contains("id3/TPE1") || identifier.contains("artist") || identifier.contains("©ART")) {
                          newTag.artist = "\(value)"
                      }
-                     // AVMetadataIdentifier.id3MetadataAlbumTitle (TALB)
-                     if newTag.album.isEmpty && (identifier.contains("id3/TALB") || identifier.contains("album")) {
+                     // Album: ID3 TALB, iTunes ©alb
+                     if newTag.album.isEmpty && (identifier.contains("id3/TALB") || identifier.contains("album") || identifier.contains("©alb")) {
                          newTag.album = "\(value)"
                      }
                 }

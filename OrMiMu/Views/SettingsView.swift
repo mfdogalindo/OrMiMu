@@ -10,6 +10,7 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("downloadFormat") private var downloadFormat: String = "mp3"
     @AppStorage("downloadBitrate") private var downloadBitrate: String = "256"
+    @AppStorage("deleteAfterConversion") private var deleteAfterConversion: Bool = true
 
     let formats = ["mp3", "m4a", "flac", "wav"]
     let bitrates = ["128", "192", "256", "320"]
@@ -32,6 +33,10 @@ struct SettingsView: View {
                     }
                     .pickerStyle(MenuPickerStyle())
                 }
+            }
+
+            Section("Conversion") {
+                Toggle("Delete original file after conversion", isOn: $deleteAfterConversion)
             }
         }
         .padding()

@@ -75,9 +75,12 @@ class ConversionService {
             if process.terminationStatus == 0 {
                 // Success
 
-                // If the output file is different from the input file, delete the original
+                // If the output file is different from the input file, check if we should delete original
                 if fileURL != outputURL {
-                    try? FileManager.default.removeItem(at: fileURL)
+                    let deleteOriginal = UserDefaults.standard.bool(forKey: "deleteAfterConversion")
+                    if deleteOriginal {
+                        try? FileManager.default.removeItem(at: fileURL)
+                    }
                 }
 
                 // Update song item on MainActor
