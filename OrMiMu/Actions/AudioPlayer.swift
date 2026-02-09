@@ -20,6 +20,7 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     @Published var currentTitle: String = ""
     @Published var currentArtist: String = ""
+    @Published var currentArtwork: NSImage?
 
     private var isPaused = false
     private var queue: [(url: URL, title: String, artist: String)] = []
@@ -50,6 +51,7 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
             self.currentTitle = title.isEmpty ? url.deletingPathExtension().lastPathComponent : title
             self.currentArtist = artist.isEmpty ? "Unknown Artist" : artist
+            self.currentArtwork = extractArtwork(from: url)
 
             isPlaying = true
             isPaused = false
@@ -80,6 +82,7 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         isPaused = false
         stopTimer()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        currentArtwork = nil
     }
     
     // Explicit play command for MPRemoteCommandCenter
@@ -250,17 +253,22 @@ class AudioPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = audioPlayer?.isPlaying == true ? 1.0 : 0.0
 
         // Attempt to load artwork if available
-        if let url = currentSongURL {
-            let asset = AVAsset(url: url)
-            let metadata = asset.commonMetadata
-            if let artworkItem = metadata.first(where: { $0.commonKey == .commonKeyArtwork }),
-               let data = artworkItem.dataValue,
-               let image = NSImage(data: data) {
-                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
-            }
+        if let image = currentArtwork {
+            let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
         }
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+    }
+
+    private func extractArtwork(from url: URL) -> NSImage? {
+        let asset = AVAsset(url: url)
+        let metadata = asset.commonMetadata
+        if let artworkItem = metadata.first(where: { $0.commonKey == .commonKeyArtwork }),
+           let data = artworkItem.dataValue,
+           let image = NSImage(data: data) {
+            return image
+        }
+        return nil
     }
 }

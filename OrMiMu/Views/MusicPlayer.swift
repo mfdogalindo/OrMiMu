@@ -12,27 +12,47 @@ struct MusicPlayer: View {
     @Binding var playableSong: URL?
     
     var body: some View {
-        VStack(spacing: 8) {
-            // Top: Song Info + Shuffle/Repeat
-            HStack {
-                VStack(alignment: .leading) {
-                    Text(audioPlayerManager.currentTitle.isEmpty ? (playableSong?.deletingPathExtension().lastPathComponent ?? "Unknown Song") : audioPlayerManager.currentTitle)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text(audioPlayerManager.currentArtist.isEmpty ? "Unknown Artist" : audioPlayerManager.currentArtist)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                Button(action: { audioPlayerManager.toggleShuffle() }) {
-                    Image(systemName: "shuffle")
-                        .foregroundColor(audioPlayerManager.isShuffle ? .accentColor : .primary)
-                }
-                .buttonStyle(.plain)
+        HStack(spacing: 12) {
+            // Left: Artwork
+            if let artwork = audioPlayerManager.currentArtwork {
+                Image(nsImage: artwork)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 60, height: 60)
+                    .cornerRadius(6)
+                    .shadow(radius: 2)
+            } else {
+                Image(systemName: "music.note")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 30, height: 30)
+                    .padding(15)
+                    .background(Color.secondary.opacity(0.2))
+                    .cornerRadius(6)
+                    .foregroundColor(.secondary)
             }
-            .padding(.horizontal)
 
-            // Middle: Scrubbing Slider
+            // Right: Controls & Info
+            VStack(spacing: 4) {
+                // Top: Song Info + Shuffle
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(audioPlayerManager.currentTitle.isEmpty ? (playableSong?.deletingPathExtension().lastPathComponent ?? "Unknown Song") : audioPlayerManager.currentTitle)
+                            .font(.headline)
+                            .lineLimit(1)
+                        Text(audioPlayerManager.currentArtist.isEmpty ? "Unknown Artist" : audioPlayerManager.currentArtist)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button(action: { audioPlayerManager.toggleShuffle() }) {
+                        Image(systemName: "shuffle")
+                            .foregroundColor(audioPlayerManager.isShuffle ? .accentColor : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // Middle: Scrubbing Slider
             HStack {
                 Text(formatTime(audioPlayerManager.currentTime))
                     .font(.caption2)
@@ -46,66 +66,73 @@ struct MusicPlayer: View {
                 Text(formatTime(audioPlayerManager.duration))
                     .font(.caption2)
                     .monospacedDigit()
-            }
-            .padding(.horizontal)
+                HStack {
+                    Text(formatTime(audioPlayerManager.currentTime))
+                        .font(.caption2)
+                        .monospacedDigit()
 
-            // Bottom: Controls + Volume
-            ZStack {
-                // Centered Controls
-                HStack(spacing: 20) {
-                    Spacer()
+                    Slider(value: Binding(
+                        get: { audioPlayerManager.currentTime },
+                        set: { audioPlayerManager.seek(to: $0) }
+                    ), in: 0...(audioPlayerManager.duration > 0 ? audioPlayerManager.duration : 1))
 
-                    Button(action: { audioPlayerManager.previous() }) {
-                        Image(systemName: "backward.fill")
-                            .font(.title2)
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(action: {
-                        if audioPlayerManager.isPlaying {
-                            audioPlayerManager.pause()
-                        } else {
-                            // Play current or resume
-                             if let song = playableSong {
-                                 // Correctly using playAudio with current metadata if available, though manager handles resume internally now
-                                 audioPlayerManager.playAudio(from: song, title: audioPlayerManager.currentTitle, artist: audioPlayerManager.currentArtist)
-                             }
-                        }
-                    }) {
-                        Image(systemName: audioPlayerManager.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 40))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button(action: { audioPlayerManager.next() }) {
-                        Image(systemName: "forward.fill")
-                            .font(.title2)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
+                    Text(formatTime(audioPlayerManager.duration))
+                        .font(.caption2)
+                        .monospacedDigit()
                 }
 
-                // Right-aligned Volume
-                HStack {
-                    Spacer()
+                // Bottom: Controls + Volume
+                ZStack {
+                    // Centered Controls
+                    HStack(spacing: 20) {
+                        Spacer()
 
+                        Button(action: { audioPlayerManager.previous() }) {
+                            Image(systemName: "backward.fill")
+                                .font(.title2)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: {
+                            if audioPlayerManager.isPlaying {
+                                audioPlayerManager.pause()
+                            } else {
+                                if let song = playableSong {
+                                    audioPlayerManager.playAudio(from: song, title: audioPlayerManager.currentTitle, artist: audioPlayerManager.currentArtist)
+                                }
+                            }
+                        }) {
+                            Image(systemName: audioPlayerManager.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.system(size: 30))
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: { audioPlayerManager.next() }) {
+                            Image(systemName: "forward.fill")
+                                .font(.title2)
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+                    }
+
+                    // Right-aligned Volume
                     HStack {
+                        Spacer()
                         Image(systemName: "speaker.fill")
                             .font(.caption)
                         Slider(value: Binding(
                             get: { audioPlayerManager.volume },
                             set: { audioPlayerManager.setVolume($0) }
                         ), in: 0...1)
-                        .frame(width: 80)
+                        .frame(width: 60)
                         Image(systemName: "speaker.wave.3.fill")
                             .font(.caption)
                     }
                 }
             }
-            .padding(.horizontal)
         }
-        .padding(.vertical, 10)
+        .padding(10)
         .background(Material.bar)
         .cornerRadius(12)
         .shadow(radius: 5)
