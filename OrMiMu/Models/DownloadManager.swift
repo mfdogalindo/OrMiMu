@@ -94,6 +94,7 @@ class DownloadManager: ObservableObject {
                 }
 
                 // 2. Iterate and download sequentially
+                var failedCount = 0
                 for (index, video) in videos.enumerated() {
                     // Check for cancellation
                     if !isDownloading { break }
@@ -151,77 +152,95 @@ class DownloadManager: ObservableObject {
                     }
 
                     await MainActor.run {
-                        statusManager.statusDetail = "Downloading item \(index + 1) of \(totalItems): \(videoTitle)"
+                        let failedMsg = failedCount > 0 ? " (Failed: \(failedCount))" : ""
+                        statusManager.statusDetail = "Downloading item \(index + 1) of \(totalItems)\(failedMsg): \(videoTitle)"
                     }
 
-                    // Download single item
-                    _ = try await YouTubeService.shared.download(
-                        url: videoUrl,
-                        format: selectedFormat,
-                        bitrate: selectedBitrate,
-                        statusManager: statusManager,
-                        progressCallback: { fileProgress in
-                            // Calculate Global Progress
-                            let globalProgress = (Double(index) + fileProgress) / Double(totalItems)
-                            Task { @MainActor in
-                                statusManager.progress = globalProgress
-                            }
-                        },
-                        onFileFinished: { filePath in
-                             // This closure is called when a file is completely finished (downloaded + converted)
+                    do {
+                        // Download single item
+                        _ = try await YouTubeService.shared.download(
+                            url: videoUrl,
+                            format: selectedFormat,
+                            bitrate: selectedBitrate,
+                            statusManager: statusManager,
+                            progressCallback: { fileProgress in
+                                // Calculate Global Progress
+                                let globalProgress = (Double(index) + fileProgress) / Double(totalItems)
+                                Task { @MainActor in
+                                    statusManager.progress = globalProgress
+                                }
+                            },
+                            onFileFinished: { filePath in
+                                 // This closure is called when a file is completely finished (downloaded + converted)
 
-                             // 1. Read Metadata
-                             var currentTags = await MetadataService.readMetadata(url: URL(fileURLWithPath: filePath))
+                                 // 1. Read Metadata
+                                 var currentTags = await MetadataService.readMetadata(url: URL(fileURLWithPath: filePath))
 
-                             // 2. Apply Overrides
-                             let finalArtist = !artistOverride.isEmpty ? artistOverride : currentTags.artist
-                             let finalAlbum = !albumOverride.isEmpty ? albumOverride : currentTags.album
-                             let finalGenre = !genreOverride.isEmpty ? genreOverride : currentTags.genre
-                             let finalYear = !yearOverride.isEmpty ? yearOverride : currentTags.year
+                                 // 2. Apply Overrides
+                                 let finalArtist = !artistOverride.isEmpty ? artistOverride : currentTags.artist
+                                 let finalAlbum = !albumOverride.isEmpty ? albumOverride : currentTags.album
+                                 let finalGenre = !genreOverride.isEmpty ? genreOverride : currentTags.genre
+                                 let finalYear = !yearOverride.isEmpty ? yearOverride : currentTags.year
 
-                             if !artistOverride.isEmpty || !albumOverride.isEmpty || !genreOverride.isEmpty || !yearOverride.isEmpty {
-                                  try? await MetadataService.updateMetadata(
-                                     filePath: filePath,
-                                     title: currentTags.title,
-                                     artist: finalArtist,
-                                     album: finalAlbum,
-                                     genre: finalGenre,
-                                     year: finalYear
-                                 )
-                                 // Update local struct for insertion
-                                 currentTags.artist = finalArtist
-                                 currentTags.album = finalAlbum
-                                 currentTags.genre = finalGenre
-                                 currentTags.year = finalYear
-                             }
-
-                             // 3. Add to Library immediately
-                             await MainActor.run {
-                                 // Check for duplicates by file path first (legacy check)
-                                 let descriptor = FetchDescriptor<SongItem>(
-                                     predicate: #Predicate { $0.filePath == filePath }
-                                 )
-                                 if let existingCount = try? modelContext.fetchCount(descriptor), existingCount == 0 {
-                                     let song = SongItem(
-                                         title: currentTags.title.isEmpty ? URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent : currentTags.title,
-                                         artist: currentTags.artist.isEmpty ? "Unknown Artist" : currentTags.artist,
-                                         album: currentTags.album.isEmpty ? "Unknown Album" : currentTags.album,
-                                         genre: currentTags.genre.isEmpty ? "Unknown Genre" : currentTags.genre,
-                                         year: currentTags.year.isEmpty ? "Unknown Year" : currentTags.year,
+                                 if !artistOverride.isEmpty || !albumOverride.isEmpty || !genreOverride.isEmpty || !yearOverride.isEmpty {
+                                      try? await MetadataService.updateMetadata(
                                          filePath: filePath,
-                                         sourceUrl: videoUrl.absoluteString, // Save source URL
-                                         duration: 0 // Ideally get duration
+                                         title: currentTags.title,
+                                         artist: finalArtist,
+                                         album: finalAlbum,
+                                         genre: finalGenre,
+                                         year: finalYear
                                      )
-                                     modelContext.insert(song)
-                                     try? modelContext.save()
+                                     // Update local struct for insertion
+                                     currentTags.artist = finalArtist
+                                     currentTags.album = finalAlbum
+                                     currentTags.genre = finalGenre
+                                     currentTags.year = finalYear
                                  }
-                             }
+
+                                 // 3. Add to Library immediately
+                                 await MainActor.run {
+                                     // Check for duplicates by file path first (legacy check)
+                                     let descriptor = FetchDescriptor<SongItem>(
+                                         predicate: #Predicate { $0.filePath == filePath }
+                                     )
+                                     if let existingCount = try? modelContext.fetchCount(descriptor), existingCount == 0 {
+                                         let song = SongItem(
+                                             title: currentTags.title.isEmpty ? URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent : currentTags.title,
+                                             artist: currentTags.artist.isEmpty ? "Unknown Artist" : currentTags.artist,
+                                             album: currentTags.album.isEmpty ? "Unknown Album" : currentTags.album,
+                                             genre: currentTags.genre.isEmpty ? "Unknown Genre" : currentTags.genre,
+                                             year: currentTags.year.isEmpty ? "Unknown Year" : currentTags.year,
+                                             filePath: filePath,
+                                             sourceUrl: videoUrl.absoluteString, // Save source URL
+                                             duration: 0 // Ideally get duration
+                                         )
+                                         modelContext.insert(song)
+                                         try? modelContext.save()
+                                     }
+                                 }
+                            }
+                        )
+                    } catch {
+                        failedCount += 1
+                        await MainActor.run {
+                            statusManager.logOutput += "\n[ERROR] Failed to download '\(videoTitle)': \(error.localizedDescription)\n"
+                            // Update progress even if failed
+                            let globalProgress = Double(index + 1) / Double(totalItems)
+                            statusManager.progress = globalProgress
+                            statusManager.statusDetail = "Failed item: \(videoTitle) (Skipping...)"
                         }
-                    )
+                        // Continue to next item
+                        continue
+                    }
                 }
 
                 await MainActor.run {
-                    statusManager.statusMessage = "Download Complete!"
+                    if failedCount > 0 {
+                        statusManager.statusMessage = "Download Complete! (\(failedCount) failed)"
+                    } else {
+                        statusManager.statusMessage = "Download Complete!"
+                    }
                     isDownloading = false
                     statusManager.isBusy = false
                     // Reset progress but keep log
