@@ -327,7 +327,7 @@ class YouTubeService {
         return nil
     }
 
-    func download(url: URL, format: String, bitrate: String, statusManager: StatusManager, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil) async throws -> [String] {
+    func download(url: URL, format: String, bitrate: String, statusManager: StatusManager, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil, onFileFinished: ((String) async throws -> Void)? = nil) async throws -> [String] {
         guard let ytDlpPath = getExecutablePath() else {
             throw YouTubeError.toolNotFound
         }
@@ -346,6 +346,7 @@ class YouTubeService {
             "--embed-thumbnail",
             "-o", outputTemplate,
             "--yes-playlist",
+            "--exec", "echo DOWNLOAD_COMPLETED_HOOK:%(filepath)s",
             url.absoluteString
         ]
 
@@ -394,6 +395,9 @@ class YouTubeService {
                 }
             }
 
+            var currentFileIndex: Double = 1.0
+            var totalFiles: Double = 1.0
+
             pipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty, let string = String(data: data, encoding: .utf8) else { return }
@@ -405,6 +409,16 @@ class YouTubeService {
                     // Detect playlist progress: [download] Downloading video 1 of 5
                     if let range = line.range(of: "Downloading video (\\d+) of (\\d+)", options: .regularExpression) {
                          let detail = String(line[range])
+
+                         let nsString = detail as NSString
+                         let regex = try? NSRegularExpression(pattern: "Downloading video (\\d+) of (\\d+)")
+                         if let match = regex?.firstMatch(in: detail, range: NSRange(location: 0, length: detail.utf16.count)) {
+                             if let r1 = Range(match.range(at: 1), in: detail), let r2 = Range(match.range(at: 2), in: detail) {
+                                 currentFileIndex = Double(String(detail[r1])) ?? 1.0
+                                 totalFiles = Double(String(detail[r2])) ?? 1.0
+                             }
+                         }
+
                          DispatchQueue.main.async {
                              statusManager.statusDetail = detail
                          }
@@ -414,9 +428,23 @@ class YouTubeService {
                     if let range = line.range(of: "\\[download\\]\\s+(\\d+\\.?\\d*)%", options: .regularExpression) {
                         let match = String(line[range])
                         if let numberRange = match.range(of: "\\d+\\.?\\d*", options: .regularExpression),
-                           let progress = Double(String(match[numberRange])) {
+                           let fileProgress = Double(String(match[numberRange])) {
+
+                            let globalProgress = ((currentFileIndex - 1.0) + (fileProgress / 100.0)) / totalFiles
+
                             DispatchQueue.main.async {
-                                statusManager.progress = progress / 100.0
+                                statusManager.progress = globalProgress
+                            }
+                        }
+                    }
+
+                    // Detect Hook
+                    if line.contains("DOWNLOAD_COMPLETED_HOOK:") {
+                        let components = line.components(separatedBy: "DOWNLOAD_COMPLETED_HOOK:")
+                        if components.count > 1 {
+                            let path = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                            Task {
+                                try? await onFileFinished?(path)
                             }
                         }
                     }
