@@ -224,7 +224,11 @@ class DownloadManager: ObservableObject {
                     statusManager.statusMessage = "Download Complete!"
                     isDownloading = false
                     statusManager.isBusy = false
-                    statusManager.reset()
+                    // Reset progress but keep log
+                    statusManager.progress = 0.0
+                    statusManager.statusDetail = ""
+                    statusManager.cancelAction = nil
+
                     urlString = ""
                     // Clear overrides
                     artist = ""
@@ -237,7 +241,10 @@ class DownloadManager: ObservableObject {
                     statusManager.statusMessage = "Error: \(error.localizedDescription)"
                     isDownloading = false
                     statusManager.isBusy = false
-                    statusManager.reset()
+                    // Reset progress but keep log
+                    statusManager.progress = 0.0
+                    statusManager.statusDetail = ""
+                    statusManager.cancelAction = nil
                 }
             }
         }
@@ -248,6 +255,9 @@ class DownloadManager: ObservableObject {
         isDownloading = false
         statusManager.isBusy = false
         statusManager.statusMessage = "Download stopped by user."
-        statusManager.reset()
+        // Reset progress but keep log
+        statusManager.progress = 0.0
+        statusManager.statusDetail = ""
+        statusManager.cancelAction = nil
     }
 }
