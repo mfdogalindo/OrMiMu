@@ -402,16 +402,24 @@ class YouTubeService {
                 let data = handle.availableData
                 guard !data.isEmpty, let string = String(data: data, encoding: .utf8) else { return }
 
+                DispatchQueue.main.async {
+                    // Cap log size to avoid memory issues
+                    if statusManager.logOutput.count > 20000 {
+                        statusManager.logOutput = String(statusManager.logOutput.suffix(10000))
+                    }
+                    statusManager.logOutput += string
+                }
+
                 let lines = string.components(separatedBy: .newlines)
                 for line in lines {
                     if line.isEmpty { continue }
 
                     // Detect playlist progress: [download] Downloading video 1 of 5
-                    if let range = line.range(of: "Downloading video (\\d+) of (\\d+)", options: .regularExpression) {
+                    if let range = line.range(of: "Downloading video\\s+(\\d+)\\s+of\\s+(\\d+)", options: .regularExpression) {
                          let detail = String(line[range])
 
                          let nsString = detail as NSString
-                         let regex = try? NSRegularExpression(pattern: "Downloading video (\\d+) of (\\d+)")
+                         let regex = try? NSRegularExpression(pattern: "Downloading video\\s+(\\d+)\\s+of\\s+(\\d+)")
                          if let match = regex?.firstMatch(in: detail, range: NSRange(location: 0, length: detail.utf16.count)) {
                              if let r1 = Range(match.range(at: 1), in: detail), let r2 = Range(match.range(at: 2), in: detail) {
                                  currentFileIndex = Double(String(detail[r1])) ?? 1.0
@@ -420,8 +428,15 @@ class YouTubeService {
                          }
 
                          DispatchQueue.main.async {
-                             statusManager.statusDetail = detail
+                             statusManager.statusDetail = "Downloading video \(Int(currentFileIndex)) of \(Int(totalFiles))"
                          }
+                    }
+
+                    // Detect Encoding/Conversion
+                    if line.contains("[ExtractAudio]") || line.contains("[ffmpeg]") {
+                        DispatchQueue.main.async {
+                             statusManager.statusDetail = "Processing/Encoding video \(Int(currentFileIndex)) of \(Int(totalFiles))..."
+                        }
                     }
 
                     // Detect percentage: [download]  25.0%

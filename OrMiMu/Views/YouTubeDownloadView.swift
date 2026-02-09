@@ -73,6 +73,28 @@ struct YouTubeDownloadView: View {
                 }
                 .disabled(downloadManager.urlString.isEmpty || !downloadManager.dependenciesInstalled)
             }
+
+            if !statusManager.logOutput.isEmpty {
+                Section("Process Log") {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            Text(statusManager.logOutput)
+                                .font(.system(.caption, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(4)
+                                .id("bottom")
+                        }
+                        .frame(height: 150)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .cornerRadius(8)
+                        .onChange(of: statusManager.logOutput) { _ in
+                            withAnimation {
+                                proxy.scrollTo("bottom", anchor: .bottom)
+                            }
+                        }
+                    }
+                }
+            }
         }
         .padding()
         .onAppear {

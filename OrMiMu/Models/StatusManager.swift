@@ -12,6 +12,7 @@ class StatusManager: ObservableObject {
     @Published var isBusy: Bool = false
     @Published var progress: Double = 0.0
     @Published var statusDetail: String = ""
+    @Published var logOutput: String = ""
     var cancelAction: (() -> Void)? = nil
 
     func reset() {
@@ -19,6 +20,7 @@ class StatusManager: ObservableObject {
         isBusy = false
         progress = 0.0
         statusDetail = ""
+        logOutput = ""
         cancelAction = nil
     }
 }
