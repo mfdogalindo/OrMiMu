@@ -78,70 +78,96 @@ class DownloadManager: ObservableObject {
 
         isDownloading = true
         statusManager.isBusy = true
-        statusManager.statusMessage = "Starting download..."
+        statusManager.statusMessage = "Fetching video info..."
         statusManager.progress = 0.0
         statusManager.statusDetail = ""
+        statusManager.logOutput = ""
 
         Task {
             do {
-                // Pass a closure to handle each file as it finishes immediately
-                _ = try await YouTubeService.shared.download(
-                    url: url,
-                    format: selectedFormat,
-                    bitrate: selectedBitrate,
-                    statusManager: statusManager,
-                    artist: nil,
-                    album: nil,
-                    genre: nil,
-                    year: nil
-                ) { filePath in
-                    // This closure is called when a file is completely finished (downloaded + converted)
+                // 1. Fetch items first (Sequential Logic)
+                let videos = try await YouTubeService.shared.fetchVideoInfo(url: url)
+                let totalItems = videos.count
 
-                    // 1. Read Metadata
-                    var currentTags = await MetadataService.readMetadata(url: URL(fileURLWithPath: filePath))
+                await MainActor.run {
+                    statusManager.statusMessage = "Found \(totalItems) items. Starting download..."
+                }
 
-                    // 2. Apply Overrides
-                    let finalArtist = !artistOverride.isEmpty ? artistOverride : currentTags.artist
-                    let finalAlbum = !albumOverride.isEmpty ? albumOverride : currentTags.album
-                    let finalGenre = !genreOverride.isEmpty ? genreOverride : currentTags.genre
-                    let finalYear = !yearOverride.isEmpty ? yearOverride : currentTags.year
+                // 2. Iterate and download sequentially
+                for (index, video) in videos.enumerated() {
+                    // Check for cancellation
+                    if !isDownloading { break }
 
-                    if !artistOverride.isEmpty || !albumOverride.isEmpty || !genreOverride.isEmpty || !yearOverride.isEmpty {
-                         try? await MetadataService.updateMetadata(
-                            filePath: filePath,
-                            title: currentTags.title,
-                            artist: finalArtist,
-                            album: finalAlbum,
-                            genre: finalGenre,
-                            year: finalYear
-                        )
-                        // Update local struct for insertion
-                        currentTags.artist = finalArtist
-                        currentTags.album = finalAlbum
-                        currentTags.genre = finalGenre
-                        currentTags.year = finalYear
-                    }
+                    guard let videoUrlString = video.url, let videoUrl = URL(string: videoUrlString) else { continue }
+                    let videoTitle = video.title ?? "Unknown Title"
 
-                    // 3. Add to Library immediately
                     await MainActor.run {
-                        // Check for duplicates
-                        let descriptor = FetchDescriptor<SongItem>(
-                            predicate: #Predicate { $0.filePath == filePath }
-                        )
-                        if let existingCount = try? modelContext.fetchCount(descriptor), existingCount == 0 {
-                            let song = SongItem(
-                                title: currentTags.title.isEmpty ? URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent : currentTags.title,
-                                artist: currentTags.artist.isEmpty ? "Unknown Artist" : currentTags.artist,
-                                album: currentTags.album.isEmpty ? "Unknown Album" : currentTags.album,
-                                genre: currentTags.genre.isEmpty ? "Unknown Genre" : currentTags.genre,
-                                year: currentTags.year.isEmpty ? "Unknown Year" : currentTags.year,
-                                filePath: filePath,
-                                duration: 0 // Ideally get duration
-                            )
-                            modelContext.insert(song)
-                            try? modelContext.save()
-                        }
+                        statusManager.statusDetail = "Downloading item \(index + 1) of \(totalItems): \(videoTitle)"
                     }
+
+                    // Download single item
+                    _ = try await YouTubeService.shared.download(
+                        url: videoUrl,
+                        format: selectedFormat,
+                        bitrate: selectedBitrate,
+                        statusManager: statusManager,
+                        progressCallback: { fileProgress in
+                            // Calculate Global Progress
+                            let globalProgress = (Double(index) + fileProgress) / Double(totalItems)
+                            Task { @MainActor in
+                                statusManager.progress = globalProgress
+                            }
+                        },
+                        onFileFinished: { filePath in
+                             // This closure is called when a file is completely finished (downloaded + converted)
+
+                             // 1. Read Metadata
+                             var currentTags = await MetadataService.readMetadata(url: URL(fileURLWithPath: filePath))
+
+                             // 2. Apply Overrides
+                             let finalArtist = !artistOverride.isEmpty ? artistOverride : currentTags.artist
+                             let finalAlbum = !albumOverride.isEmpty ? albumOverride : currentTags.album
+                             let finalGenre = !genreOverride.isEmpty ? genreOverride : currentTags.genre
+                             let finalYear = !yearOverride.isEmpty ? yearOverride : currentTags.year
+
+                             if !artistOverride.isEmpty || !albumOverride.isEmpty || !genreOverride.isEmpty || !yearOverride.isEmpty {
+                                  try? await MetadataService.updateMetadata(
+                                     filePath: filePath,
+                                     title: currentTags.title,
+                                     artist: finalArtist,
+                                     album: finalAlbum,
+                                     genre: finalGenre,
+                                     year: finalYear
+                                 )
+                                 // Update local struct for insertion
+                                 currentTags.artist = finalArtist
+                                 currentTags.album = finalAlbum
+                                 currentTags.genre = finalGenre
+                                 currentTags.year = finalYear
+                             }
+
+                             // 3. Add to Library immediately
+                             await MainActor.run {
+                                 // Check for duplicates
+                                 let descriptor = FetchDescriptor<SongItem>(
+                                     predicate: #Predicate { $0.filePath == filePath }
+                                 )
+                                 if let existingCount = try? modelContext.fetchCount(descriptor), existingCount == 0 {
+                                     let song = SongItem(
+                                         title: currentTags.title.isEmpty ? URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent : currentTags.title,
+                                         artist: currentTags.artist.isEmpty ? "Unknown Artist" : currentTags.artist,
+                                         album: currentTags.album.isEmpty ? "Unknown Album" : currentTags.album,
+                                         genre: currentTags.genre.isEmpty ? "Unknown Genre" : currentTags.genre,
+                                         year: currentTags.year.isEmpty ? "Unknown Year" : currentTags.year,
+                                         filePath: filePath,
+                                         duration: 0 // Ideally get duration
+                                     )
+                                     modelContext.insert(song)
+                                     try? modelContext.save()
+                                 }
+                             }
+                        }
+                    )
                 }
 
                 await MainActor.run {

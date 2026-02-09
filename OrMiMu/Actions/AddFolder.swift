@@ -275,6 +275,15 @@ class DependencyManager {
     }
 }
 
+struct YouTubeVideoInfo: Decodable {
+    let id: String?
+    let url: String?
+    let title: String?
+    let webpage_url: String?
+    let _type: String?
+    let entries: [YouTubeVideoInfo]?
+}
+
 class YouTubeService {
     static let shared = YouTubeService()
 
@@ -327,7 +336,70 @@ class YouTubeService {
         return nil
     }
 
-    func download(url: URL, format: String, bitrate: String, statusManager: StatusManager, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil, onFileFinished: ((String) async throws -> Void)? = nil) async throws -> [String] {
+    func fetchVideoInfo(url: URL) async throws -> [YouTubeVideoInfo] {
+        guard let ytDlpPath = getExecutablePath() else {
+            throw YouTubeError.toolNotFound
+        }
+
+        // Use --dump-single-json --flat-playlist to get info quickly
+        let arguments = ["--dump-single-json", "--flat-playlist", url.absoluteString]
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+
+            // Re-use logic for path setup
+            let isManagedBinary = ytDlpPath == DependencyManager.shared.ytDlpPath.path
+            if isManagedBinary {
+                process.executableURL = URL(fileURLWithPath: ytDlpPath)
+                process.arguments = arguments
+            } else {
+                let pythonPath = YouTubeService.shared.getPythonPath()
+                if let python = pythonPath {
+                    process.executableURL = URL(fileURLWithPath: python)
+                    var newArgs = [ytDlpPath]
+                    newArgs.append(contentsOf: arguments)
+                    process.arguments = newArgs
+                } else {
+                    process.executableURL = URL(fileURLWithPath: ytDlpPath)
+                    process.arguments = arguments
+                }
+            }
+
+            var env = ProcessInfo.processInfo.environment
+            env["PATH"] = (env["PATH"] ?? "") + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+            process.environment = env
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+
+            do {
+                try process.run()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+
+                if process.terminationStatus == 0 {
+                    let decoder = JSONDecoder()
+                    if let info = try? decoder.decode(YouTubeVideoInfo.self, from: data) {
+                        if info._type == "playlist", let entries = info.entries {
+                            continuation.resume(returning: entries)
+                        } else {
+                            continuation.resume(returning: [info])
+                        }
+                    } else {
+                        // Fallback: sometimes yt-dlp outputs one JSON object per line for playlists if structured differently
+                        // But dump-single-json usually prevents that.
+                        continuation.resume(throwing: YouTubeError.downloadFailed("Failed to parse playlist info"))
+                    }
+                } else {
+                    continuation.resume(throwing: YouTubeError.downloadFailed("Failed to fetch playlist info"))
+                }
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    func download(url: URL, format: String, bitrate: String, statusManager: StatusManager, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil, progressCallback: ((Double) -> Void)? = nil, onFileFinished: ((String) async throws -> Void)? = nil) async throws -> [String] {
         guard let ytDlpPath = getExecutablePath() else {
             throw YouTubeError.toolNotFound
         }
@@ -415,6 +487,7 @@ class YouTubeService {
                     if line.isEmpty { continue }
 
                     // Detect playlist progress: [download] Downloading video 1 of 5
+                    // Note: In sequential mode, we rely on DownloadManager for global status updates, but this regex is kept for robustness
                     if let range = line.range(of: "Downloading video\\s+(\\d+)\\s+of\\s+(\\d+)", options: .regularExpression) {
                          let detail = String(line[range])
 
@@ -427,15 +500,21 @@ class YouTubeService {
                              }
                          }
 
-                         DispatchQueue.main.async {
-                             statusManager.statusDetail = "Downloading video \(Int(currentFileIndex)) of \(Int(totalFiles))"
+                         // Only update global status detail if not managed externally (progressCallback is nil)
+                         if progressCallback == nil {
+                             DispatchQueue.main.async {
+                                 statusManager.statusDetail = "Downloading video \(Int(currentFileIndex)) of \(Int(totalFiles))"
+                             }
                          }
                     }
 
                     // Detect Encoding/Conversion
                     if line.contains("[ExtractAudio]") || line.contains("[ffmpeg]") {
-                        DispatchQueue.main.async {
-                             statusManager.statusDetail = "Processing/Encoding video \(Int(currentFileIndex)) of \(Int(totalFiles))..."
+                        // Only update if no external management
+                        if progressCallback == nil {
+                            DispatchQueue.main.async {
+                                 statusManager.statusDetail = "Processing/Encoding video \(Int(currentFileIndex)) of \(Int(totalFiles))..."
+                            }
                         }
                     }
 
@@ -445,10 +524,17 @@ class YouTubeService {
                         if let numberRange = match.range(of: "\\d+\\.?\\d*", options: .regularExpression),
                            let fileProgress = Double(String(match[numberRange])) {
 
-                            let globalProgress = ((currentFileIndex - 1.0) + (fileProgress / 100.0)) / totalFiles
-
-                            DispatchQueue.main.async {
-                                statusManager.progress = globalProgress
+                            if let callback = progressCallback {
+                                // Report raw file progress (0.0 - 1.0)
+                                DispatchQueue.main.async {
+                                    callback(fileProgress / 100.0)
+                                }
+                            } else {
+                                // Standard logic
+                                let globalProgress = ((currentFileIndex - 1.0) + (fileProgress / 100.0)) / totalFiles
+                                DispatchQueue.main.async {
+                                    statusManager.progress = globalProgress
+                                }
                             }
                         }
                     }
