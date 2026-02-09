@@ -327,7 +327,7 @@ class YouTubeService {
         return nil
     }
 
-    func download(url: URL, format: String, bitrate: String, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil) async throws -> String {
+    func download(url: URL, format: String, bitrate: String, statusManager: StatusManager, title: String? = nil, artist: String? = nil, album: String? = nil, genre: String? = nil, year: String? = nil) async throws -> [String] {
         guard let ytDlpPath = getExecutablePath() else {
             throw YouTubeError.toolNotFound
         }
@@ -345,12 +345,11 @@ class YouTubeService {
             "--add-metadata",
             "--embed-thumbnail",
             "-o", outputTemplate,
-            "--no-playlist",
+            "--yes-playlist",
             url.absoluteString
         ]
 
         if let ffmpeg = ffmpegPath {
-            // Need to insert ffmpeg-location before other args that might use it
              var newArgs: [String] = ["--ffmpeg-location", ffmpeg]
              newArgs.append(contentsOf: arguments)
              arguments = newArgs
@@ -358,9 +357,8 @@ class YouTubeService {
              print("Warning: FFmpeg not found. Conversion and metadata embedding may fail.")
         }
 
-        return try await Task.detached(priority: .userInitiated) {
+        return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
-
             let isManagedBinary = ytDlpPath == DependencyManager.shared.ytDlpPath.path
 
             if isManagedBinary {
@@ -387,44 +385,88 @@ class YouTubeService {
             process.standardOutput = pipe
             process.standardError = pipe
 
-            try process.run()
-            process.waitUntilExit()
+            var collectedPaths: [String] = []
+            let queue = DispatchQueue(label: "com.ormimu.outputQueue")
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
+            DispatchQueue.main.async {
+                statusManager.cancelAction = {
+                    process.terminate()
+                }
+            }
 
-            if process.terminationStatus == 0 {
-                // Parse output to find filename
-                var finalPath = outputFolder.path
-                 if let line = output.components(separatedBy: .newlines).first(where: { $0.contains("Destination:") && ($0.contains(".mp3") || $0.contains(".\(format)")) }) {
-                    let components = line.components(separatedBy: "Destination: ")
-                    if components.count > 1 {
-                        finalPath = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty, let string = String(data: data, encoding: .utf8) else { return }
+
+                let lines = string.components(separatedBy: .newlines)
+                for line in lines {
+                    if line.isEmpty { continue }
+
+                    // Detect playlist progress: [download] Downloading video 1 of 5
+                    if let range = line.range(of: "Downloading video (\\d+) of (\\d+)", options: .regularExpression) {
+                         let detail = String(line[range])
+                         DispatchQueue.main.async {
+                             statusManager.statusDetail = detail
+                         }
+                    }
+
+                    // Detect percentage: [download]  25.0%
+                    if let range = line.range(of: "\\[download\\]\\s+(\\d+\\.?\\d*)%", options: .regularExpression) {
+                        let match = String(line[range])
+                        if let numberRange = match.range(of: "\\d+\\.?\\d*", options: .regularExpression),
+                           let progress = Double(String(match[numberRange])) {
+                            DispatchQueue.main.async {
+                                statusManager.progress = progress / 100.0
+                            }
+                        }
+                    }
+
+                    // Detect destination
+                    if line.contains("Destination:") {
+                        let components = line.components(separatedBy: "Destination: ")
+                        if components.count > 1 {
+                            let path = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                            queue.async {
+                                collectedPaths.append(path)
+                            }
+                        }
                     }
                 }
-                 // Try finding "has been downloaded"
-                if let line = output.components(separatedBy: .newlines).first(where: { $0.contains("has been downloaded") }) {
-                     if let match = output.components(separatedBy: .newlines).first(where: { $0.contains("[download]") && $0.contains("Destination:") }) {
-                         let components = match.components(separatedBy: "Destination: ")
-                         if components.count > 1 {
-                             finalPath = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                         }
-                     }
-                }
-
-                // Fallback for when conversion happens, sometimes "Destination" line is earlier for the temp file.
-                // We should look for "[ExtractAudio] Destination: <final_file>"
-                 if let line = output.components(separatedBy: .newlines).first(where: { $0.contains("[ExtractAudio] Destination:") }) {
-                     let components = line.components(separatedBy: "Destination: ")
-                     if components.count > 1 {
-                         finalPath = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                     }
-                 }
-
-                return finalPath
-            } else {
-                throw YouTubeError.downloadFailed("Exit code \(process.terminationStatus): \(output)")
             }
-        }.value
+
+            process.terminationHandler = { process in
+                pipe.fileHandleForReading.readabilityHandler = nil
+
+                if process.terminationStatus == 0 {
+                    queue.sync {
+                        // Filter paths to only include those that match the requested format or exist
+                        // Since 'Destination' can appear multiple times (temp files), we should check existence
+                        let finalPaths = collectedPaths.filter { path in
+                            FileManager.default.fileExists(atPath: path) &&
+                            (path.hasSuffix(".\(format)") || path.hasSuffix(".mp3"))
+                        }
+                        // If no specific format match found (maybe conversion didn't happen or different ext), return existing ones
+                        // But usually we want unique paths.
+                        let uniquePaths = Array(Set(finalPaths))
+
+                        // If we found nothing but success, maybe it was a 'already downloaded' case
+                        if uniquePaths.isEmpty {
+                             let existing = collectedPaths.filter { FileManager.default.fileExists(atPath: $0) }
+                             continuation.resume(returning: Array(Set(existing)))
+                        } else {
+                             continuation.resume(returning: uniquePaths)
+                        }
+                    }
+                } else {
+                    continuation.resume(throwing: YouTubeError.downloadFailed("Process terminated with status \(process.terminationStatus)"))
+                }
+            }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
     }
 }

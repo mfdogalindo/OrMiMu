@@ -390,13 +390,26 @@ struct YouTubeDownloadView: View {
             }
 
             if isDownloading {
-                ProgressView("Downloading...")
-            }
+                VStack(spacing: 8) {
+                    ProgressView(value: statusManager.progress)
+                    Text(statusManager.statusDetail.isEmpty ? "Downloading..." : statusManager.statusDetail)
+                        .font(.caption)
 
-            Button("Download") {
-                startDownload()
+                    Button("Stop Download") {
+                        statusManager.cancelAction?()
+                        isDownloading = false
+                        statusManager.isBusy = false
+                        statusManager.statusMessage = "Download stopped by user."
+                        statusManager.reset()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                Button("Download") {
+                    startDownload()
+                }
+                .disabled(urlString.isEmpty || !dependenciesInstalled)
             }
-            .disabled(urlString.isEmpty || isDownloading || !dependenciesInstalled)
         }
         .padding()
         //.navigationTitle("YouTube Download") // Not needed in main content area
@@ -445,60 +458,73 @@ struct YouTubeDownloadView: View {
         isDownloading = true
         statusManager.isBusy = true
         statusManager.statusMessage = "Starting download..."
+        statusManager.progress = 0.0
+        statusManager.statusDetail = ""
 
         Task {
             do {
-                let filePath = try await YouTubeService.shared.download(
+                let filePaths = try await YouTubeService.shared.download(
                     url: url,
                     format: selectedFormat,
                     bitrate: selectedBitrate,
-                    // Passing nil to overrides as we handle them explicitly after download
+                    statusManager: statusManager,
                     artist: nil,
                     album: nil,
                     genre: nil,
                     year: nil
                 )
 
-                // Read current tags (YouTube defaults)
-                var currentTags = await MetadataService.readMetadata(url: URL(fileURLWithPath: filePath))
+                var addedCount = 0
+                for filePath in filePaths {
+                    // Read current tags (YouTube defaults)
+                    var currentTags = await MetadataService.readMetadata(url: URL(fileURLWithPath: filePath))
 
-                // Check if any overrides are provided
-                if !artist.isEmpty || !album.isEmpty || !genre.isEmpty || !year.isEmpty {
-                    let finalTitle = currentTags.title
-                    let finalArtist = !artist.isEmpty ? artist : currentTags.artist
-                    let finalAlbum = !album.isEmpty ? album : currentTags.album
-                    let finalGenre = !genre.isEmpty ? genre : currentTags.genre
-                    let finalYear = !year.isEmpty ? year : currentTags.year
+                    // Check if any overrides are provided
+                    if !artist.isEmpty || !album.isEmpty || !genre.isEmpty || !year.isEmpty {
+                        // Only override title if it's a single file download
+                        let finalTitle = (filePaths.count == 1) ? currentTags.title : currentTags.title
+                        let finalArtist = !artist.isEmpty ? artist : currentTags.artist
+                        let finalAlbum = !album.isEmpty ? album : currentTags.album
+                        let finalGenre = !genre.isEmpty ? genre : currentTags.genre
+                        let finalYear = !year.isEmpty ? year : currentTags.year
 
-                    // Apply override
-                    try await MetadataService.updateMetadata(
-                        filePath: filePath,
-                        title: finalTitle,
-                        artist: finalArtist,
-                        album: finalAlbum,
-                        genre: finalGenre,
-                        year: finalYear
-                    )
+                        // Apply override
+                        try await MetadataService.updateMetadata(
+                            filePath: filePath,
+                            title: finalTitle,
+                            artist: finalArtist,
+                            album: finalAlbum,
+                            genre: finalGenre,
+                            year: finalYear
+                        )
 
-                    // Update local tags struct with overridden values for UI/DB
-                    currentTags.artist = finalArtist
-                    currentTags.album = finalAlbum
-                    currentTags.genre = finalGenre
-                    currentTags.year = finalYear
+                        // Update local tags struct with overridden values for UI/DB
+                        currentTags.artist = finalArtist
+                        currentTags.album = finalAlbum
+                        currentTags.genre = finalGenre
+                        currentTags.year = finalYear
+                    }
+
+                    await MainActor.run {
+                        addToLibrary(filePath: filePath, tags: currentTags)
+                    }
+                    addedCount += 1
                 }
 
                 await MainActor.run {
-                    addToLibrary(filePath: filePath, tags: currentTags)
-                    statusManager.statusMessage = "Success! Saved to \(filePath)"
+                    statusManager.statusMessage = "Success! Saved \(addedCount) songs."
                     isDownloading = false
                     statusManager.isBusy = false
+                    statusManager.reset()
                     urlString = ""
                 }
             } catch {
                 await MainActor.run {
+                    // Check if error is related to user cancellation if needed, but simple error display is fine
                     statusManager.statusMessage = "Error: \(error.localizedDescription)"
                     isDownloading = false
                     statusManager.isBusy = false
+                    statusManager.reset()
                 }
             }
         }
