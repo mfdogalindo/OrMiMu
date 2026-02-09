@@ -46,6 +46,7 @@ final class SongItem: Identifiable {
     var genre: String
     var year: String
     var filePath: String
+    var sourceUrl: String? // Added for YouTube tracking
     var duration: Double
     var dateAdded: Date
 
@@ -57,7 +58,7 @@ final class SongItem: Identifiable {
     // Relationship to Playlist
     var playlists: [PlaylistItem]?
 
-    init(id: UUID = UUID(), title: String, artist: String, album: String, genre: String, year: String, filePath: String, duration: Double, dateAdded: Date = Date()) {
+    init(id: UUID = UUID(), title: String, artist: String, album: String, genre: String, year: String, filePath: String, sourceUrl: String? = nil, duration: Double, dateAdded: Date = Date()) {
         self.id = id
         self.title = title
         self.artist = artist
@@ -65,6 +66,7 @@ final class SongItem: Identifiable {
         self.genre = genre
         self.year = year
         self.filePath = filePath
+        self.sourceUrl = sourceUrl
         self.duration = duration
         self.dateAdded = dateAdded
     }

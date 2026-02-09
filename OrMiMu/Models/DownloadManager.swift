@@ -101,6 +101,31 @@ class DownloadManager: ObservableObject {
                     guard let videoUrlString = video.url, let videoUrl = URL(string: videoUrlString) else { continue }
                     let videoTitle = video.title ?? "Unknown Title"
 
+                    // Check for duplicate in DB using sourceUrl
+                    var shouldSkip = false
+
+                    await MainActor.run {
+                        let descriptor = FetchDescriptor<SongItem>(
+                            predicate: #Predicate { $0.sourceUrl == videoUrlString }
+                        )
+                        if let existingSongs = try? modelContext.fetch(descriptor), let existing = existingSongs.first {
+                            // Check if file physically exists
+                            if FileManager.default.fileExists(atPath: existing.filePath) {
+                                shouldSkip = true
+                                statusManager.statusDetail = "Skipping duplicate: \(videoTitle)"
+                                // Update progress even if skipped
+                                let globalProgress = Double(index + 1) / Double(totalItems)
+                                statusManager.progress = globalProgress
+                            }
+                        }
+                    }
+
+                    if shouldSkip {
+                        // Short delay to let user see "Skipping..." message
+                        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s
+                        continue
+                    }
+
                     await MainActor.run {
                         statusManager.statusDetail = "Downloading item \(index + 1) of \(totalItems): \(videoTitle)"
                     }
@@ -148,7 +173,7 @@ class DownloadManager: ObservableObject {
 
                              // 3. Add to Library immediately
                              await MainActor.run {
-                                 // Check for duplicates
+                                 // Check for duplicates by file path first (legacy check)
                                  let descriptor = FetchDescriptor<SongItem>(
                                      predicate: #Predicate { $0.filePath == filePath }
                                  )
@@ -160,6 +185,7 @@ class DownloadManager: ObservableObject {
                                          genre: currentTags.genre.isEmpty ? "Unknown Genre" : currentTags.genre,
                                          year: currentTags.year.isEmpty ? "Unknown Year" : currentTags.year,
                                          filePath: filePath,
+                                         sourceUrl: videoUrl.absoluteString, // Save source URL
                                          duration: 0 // Ideally get duration
                                      )
                                      modelContext.insert(song)
