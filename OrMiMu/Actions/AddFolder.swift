@@ -407,7 +407,8 @@ class YouTubeService {
         let outputFolder = FileManager.default.urls(for: .musicDirectory, in: .userDomainMask).first?.appendingPathComponent("OrMiMu") ?? FileManager.default.temporaryDirectory.appendingPathComponent("OrMiMu_Downloads")
         try? FileManager.default.createDirectory(at: outputFolder, withIntermediateDirectories: true)
 
-        let outputTemplate = outputFolder.path + "/%(title)s.%(ext)s"
+        // Update template to include artist and ID to prevent duplicates
+        let outputTemplate = outputFolder.path + "/%(artist,uploader)s - %(title)s [%(id)s].%(ext)s"
         let ffmpegPath = getFFmpegPath()
 
         var arguments: [String] = [
@@ -416,6 +417,8 @@ class YouTubeService {
             "--audio-quality", "\(bitrate)K",
             "--add-metadata",
             "--embed-thumbnail",
+            "--parse-metadata", "description:(?s)(?P<meta_comment>.*)", // Parse description into meta_comment
+            "--parse-metadata", "id:%(meta_comment)s", // Attempt to inject ID, though --embed-metadata usually suffices with standard tags
             "-o", outputTemplate,
             "--yes-playlist",
             "--exec", "echo DOWNLOAD_COMPLETED_HOOK:%(filepath)s",

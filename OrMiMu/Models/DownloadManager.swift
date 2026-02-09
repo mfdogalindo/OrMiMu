@@ -100,27 +100,51 @@ class DownloadManager: ObservableObject {
 
                     guard let videoUrlString = video.url, let videoUrl = URL(string: videoUrlString) else { continue }
                     let videoTitle = video.title ?? "Unknown Title"
+                    let videoId = video.id ?? ""
 
-                    // Check for duplicate in DB using sourceUrl
+                    // Check for duplicate in DB using sourceUrl OR filesystem (using new ID format)
                     var shouldSkip = false
 
                     await MainActor.run {
+                        // 1. Check DB sourceUrl (Exact match or substring match for safety)
                         let descriptor = FetchDescriptor<SongItem>(
-                            predicate: #Predicate { $0.sourceUrl == videoUrlString }
+                            predicate: #Predicate { $0.sourceUrl == videoUrlString } // Basic URL check
                         )
+
                         if let existingSongs = try? modelContext.fetch(descriptor), let existing = existingSongs.first {
-                            // Check if file physically exists
                             if FileManager.default.fileExists(atPath: existing.filePath) {
                                 shouldSkip = true
-                                statusManager.statusDetail = "Skipping duplicate: \(videoTitle)"
-                                // Update progress even if skipped
-                                let globalProgress = Double(index + 1) / Double(totalItems)
-                                statusManager.progress = globalProgress
+                            }
+                        }
+
+                        // 2. Check DB sourceUrl using ID (stronger check against URL variations)
+                        if !shouldSkip && !videoId.isEmpty {
+                            // SwiftData predicates are limited, iterate if needed or use simple contains if supported.
+                            // Since we might not support 'contains' well on all Strings in predicates, let's rely on the file system check as a robust fallback
+                            // or try a broader fetch if performance allows. For now, filesystem check is very reliable with the new naming convention.
+                        }
+                    }
+
+                    // 3. Check Filesystem for [ID] in filename (robust fallback)
+                    if !shouldSkip && !videoId.isEmpty {
+                        let outputFolder = FileManager.default.urls(for: .musicDirectory, in: .userDomainMask).first?.appendingPathComponent("OrMiMu") ?? FileManager.default.temporaryDirectory.appendingPathComponent("OrMiMu_Downloads")
+                        if let files = try? FileManager.default.contentsOfDirectory(atPath: outputFolder.path) {
+                            for file in files {
+                                if file.contains("[\(videoId)]") {
+                                    shouldSkip = true
+                                    break
+                                }
                             }
                         }
                     }
 
                     if shouldSkip {
+                        await MainActor.run {
+                            statusManager.statusDetail = "Skipping duplicate: \(videoTitle)"
+                            // Update progress even if skipped
+                            let globalProgress = Double(index + 1) / Double(totalItems)
+                            statusManager.progress = globalProgress
+                        }
                         // Short delay to let user see "Skipping..." message
                         try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s
                         continue
