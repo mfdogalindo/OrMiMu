@@ -137,7 +137,13 @@ class LibraryService {
             }
 
             let url = URL(fileURLWithPath: song.filePath)
-            guard fileManager.fileExists(atPath: song.filePath) else { continue }
+            if !fileManager.fileExists(atPath: song.filePath) {
+                await MainActor.run {
+                    modelContext.delete(song)
+                    // statusManager?.statusMessage = "Removed missing file: \(song.title)" // Optional: detailed log
+                }
+                continue
+            }
 
             let tags = await MetadataService.readMetadata(url: url)
             let duration = await getDuration(url: url)
