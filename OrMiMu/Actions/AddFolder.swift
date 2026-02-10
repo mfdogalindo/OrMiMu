@@ -101,10 +101,10 @@ class LibraryService {
 
                 let song = SongItem(
                     title: tags.title.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : tags.title,
-                    artist: tags.artist.isEmpty ? "Unknown Artist" : tags.artist,
-                    album: tags.album.isEmpty ? "Unknown Album" : tags.album,
-                    genre: tags.genre.isEmpty ? "Unknown Genre" : tags.genre,
-                    year: tags.year.isEmpty ? "Unknown Year" : tags.year,
+                    artist: tags.artist.isEmpty ? "" : tags.artist,
+                    album: tags.album.isEmpty ? "" : tags.album,
+                    genre: tags.genre.isEmpty ? "" : tags.genre,
+                    year: tags.year.isEmpty ? "" : tags.year,
                     filePath: fileURL.path,
                     duration: duration
                 )
@@ -150,10 +150,10 @@ class LibraryService {
 
             // Update song properties
             song.title = tags.title.isEmpty ? url.deletingPathExtension().lastPathComponent : tags.title
-            song.artist = tags.artist.isEmpty ? "Unknown Artist" : tags.artist
-            song.album = tags.album.isEmpty ? "Unknown Album" : tags.album
-            song.genre = tags.genre.isEmpty ? "Unknown Genre" : tags.genre
-            song.year = tags.year.isEmpty ? "Unknown Year" : tags.year
+            song.artist = tags.artist.isEmpty ? "" : tags.artist
+            song.album = tags.album.isEmpty ? "" : tags.album
+            song.genre = tags.genre.isEmpty ? "" : tags.genre
+            song.year = tags.year.isEmpty ? "" : tags.year
             song.duration = duration
         }
 

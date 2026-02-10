@@ -207,10 +207,10 @@ class DownloadManager: ObservableObject {
                                      if let existingCount = try? modelContext.fetchCount(descriptor), existingCount == 0 {
                                          let song = SongItem(
                                              title: currentTags.title.isEmpty ? URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent : currentTags.title,
-                                             artist: currentTags.artist.isEmpty ? "Unknown Artist" : currentTags.artist,
-                                             album: currentTags.album.isEmpty ? "Unknown Album" : currentTags.album,
-                                             genre: currentTags.genre.isEmpty ? "Unknown Genre" : currentTags.genre,
-                                             year: currentTags.year.isEmpty ? "Unknown Year" : currentTags.year,
+                                             artist: currentTags.artist.isEmpty ? "" : currentTags.artist,
+                                             album: currentTags.album.isEmpty ? "" : currentTags.album,
+                                             genre: currentTags.genre.isEmpty ? "" : currentTags.genre,
+                                             year: currentTags.year.isEmpty ? "" : currentTags.year,
                                              filePath: filePath,
                                              sourceUrl: videoUrl.absoluteString, // Save source URL
                                              duration: 0 // Ideally get duration
