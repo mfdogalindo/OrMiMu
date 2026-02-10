@@ -407,6 +407,7 @@ struct EditMetadataView: View {
 struct BulkEditMetadataView: View {
     var songs: [SongItem]
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var statusManager: StatusManager
 
     @State private var artist: String = ""
     @State private var album: String = ""
@@ -462,32 +463,62 @@ struct BulkEditMetadataView: View {
     }
 
     func save() {
+        // Prepare data before task
+        let newArtist = updateArtist ? artist : ""
+        let newAlbum = updateAlbum ? album : ""
+        let newGenre = updateGenre ? genre : ""
+        let newYear = updateYear ? year : ""
+        let shouldUpdateArtist = updateArtist
+        let shouldUpdateAlbum = updateAlbum
+        let shouldUpdateGenre = updateGenre
+        let shouldUpdateYear = updateYear
+
+        let totalCount = songs.count
+
         Task {
-            for song in songs {
-                let newArtist = updateArtist ? artist : song.artist
-                let newAlbum = updateAlbum ? album : song.album
-                let newGenre = updateGenre ? genre : song.genre
-                let newYear = updateYear ? year : song.year
+            await MainActor.run {
+                statusManager.isBusy = true
+                statusManager.progress = 0.0
+                statusManager.statusMessage = "Updating metadata..."
+            }
+
+            for (index, song) in songs.enumerated() {
+                // Determine current values inside loop as fallback
+                let finalArtist = shouldUpdateArtist ? newArtist : song.artist
+                let finalAlbum = shouldUpdateAlbum ? newAlbum : song.album
+                let finalGenre = shouldUpdateGenre ? newGenre : song.genre
+                let finalYear = shouldUpdateYear ? newYear : song.year
 
                 // Only call update if something changed for this song
-                if updateArtist || updateAlbum || updateGenre || updateYear {
+                if shouldUpdateArtist || shouldUpdateAlbum || shouldUpdateGenre || shouldUpdateYear {
                      try? await MetadataService.updateMetadata(
                         filePath: song.filePath,
                         title: song.title,
-                        artist: newArtist,
-                        album: newAlbum,
-                        genre: newGenre,
-                        year: newYear
+                        artist: finalArtist,
+                        album: finalAlbum,
+                        genre: finalGenre,
+                        year: finalYear
                     )
 
-                     // Optimistic UI updates must happen on main actor, usually SwiftData models are main actor bound
+                     // Optimistic UI updates must happen on main actor
                      await MainActor.run {
-                         if updateArtist { song.artist = newArtist }
-                         if updateAlbum { song.album = newAlbum }
-                         if updateGenre { song.genre = newGenre }
-                         if updateYear { song.year = newYear }
+                         if shouldUpdateArtist { song.artist = finalArtist }
+                         if shouldUpdateAlbum { song.album = finalAlbum }
+                         if shouldUpdateGenre { song.genre = finalGenre }
+                         if shouldUpdateYear { song.year = finalYear }
+
+                         // Update progress
+                         let progress = Double(index + 1) / Double(totalCount)
+                         statusManager.progress = progress
+                         statusManager.statusMessage = "Updating metadata (\(index + 1)/\(totalCount))..."
                      }
                 }
+            }
+
+            await MainActor.run {
+                statusManager.isBusy = false
+                statusManager.statusMessage = "Metadata update complete."
+                statusManager.progress = 0.0
             }
         }
         dismiss()
