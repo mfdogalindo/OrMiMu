@@ -12,6 +12,7 @@ struct YouTubeDownloadView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var statusManager: StatusManager
     @EnvironmentObject var downloadManager: DownloadManager
+    @State private var showFailedDownloads = false
 
     var body: some View {
         Form {
@@ -68,10 +69,20 @@ struct YouTubeDownloadView: View {
                     .buttonStyle(.bordered)
                 }
             } else {
-                Button("Download") {
-                    downloadManager.startDownload(statusManager: statusManager, modelContext: modelContext)
+                HStack {
+                    Button("Download") {
+                        downloadManager.startDownload(statusManager: statusManager, modelContext: modelContext)
+                    }
+                    .disabled(downloadManager.urlString.isEmpty || !downloadManager.dependenciesInstalled)
+
+                    if !downloadManager.failedDownloads.isEmpty {
+                        Spacer()
+                        Button("Show Failed Items (\(downloadManager.failedDownloads.count))") {
+                            showFailedDownloads = true
+                        }
+                        .foregroundStyle(.red)
+                    }
                 }
-                .disabled(downloadManager.urlString.isEmpty || !downloadManager.dependenciesInstalled)
             }
 
             if !statusManager.logOutput.isEmpty {
@@ -99,6 +110,68 @@ struct YouTubeDownloadView: View {
         .padding()
         .onAppear {
             downloadManager.checkDependencies()
+        }
+        .sheet(isPresented: $showFailedDownloads) {
+            FailedDownloadsView(items: downloadManager.failedDownloads)
+        }
+    }
+}
+
+struct FailedDownloadsView: View {
+    var items: [DownloadManager.FailedDownloadItem]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text("Failed Downloads")
+                    .font(.headline)
+                Spacer()
+                Button("Close") {
+                    dismiss()
+                }
+            }
+            .padding()
+
+            Table(items) {
+                TableColumn("Title", value: \.title)
+                TableColumn("URL", value: \.url)
+                TableColumn("Error", value: \.error)
+            }
+
+            HStack {
+                Spacer()
+                Button("Download CSV") {
+                    saveCSV()
+                }
+            }
+            .padding()
+        }
+        .frame(minWidth: 500, minHeight: 300)
+    }
+
+    private func saveCSV() {
+        let header = "Title,URL,Error\n"
+        let csvContent = items.map { item in
+            let escapedTitle = item.title.replacingOccurrences(of: "\"", with: "\"\"")
+            let escapedError = item.error.replacingOccurrences(of: "\"", with: "\"\"")
+            return "\"\(escapedTitle)\",\"\(item.url)\",\"\(escapedError)\""
+        }.joined(separator: "\n")
+
+        let finalString = header + csvContent
+
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.commaSeparatedText]
+        savePanel.nameFieldStringValue = "failed_downloads.csv"
+
+        savePanel.begin { response in
+            if response == .OK, let url = savePanel.url {
+                do {
+                    try finalString.write(to: url, atomically: true, encoding: .utf8)
+                } catch {
+                    print("Failed to save CSV: \(error)")
+                }
+            }
         }
     }
 }
