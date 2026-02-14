@@ -28,6 +28,7 @@ struct ContentView: View {
         case library
         case playlists
         case download
+        case external
 
         var id: Self { self }
 
@@ -36,6 +37,7 @@ struct ContentView: View {
             case .library: return "Library"
             case .playlists: return "Playlists"
             case .download: return "Download"
+            case .external: return "External Devices"
             }
         }
     }
@@ -62,6 +64,11 @@ struct ContentView: View {
                     Label("Download", systemImage: "arrow.down.circle")
                 }
                 .buttonStyle(HeaderButtonStyle(isSelected: selectedTab == .download))
+
+                Button(action: { selectedTab = .external }) {
+                    Label("Devices", systemImage: "externaldrive")
+                }
+                .buttonStyle(HeaderButtonStyle(isSelected: selectedTab == .external))
 
                 Spacer()
 
@@ -98,6 +105,8 @@ struct ContentView: View {
                     }
                 case .download:
                     YouTubeDownloadView()
+                case .external:
+                    DeviceManagerView()
                 case .none, .some:
                     Text("Select an item")
                 }
