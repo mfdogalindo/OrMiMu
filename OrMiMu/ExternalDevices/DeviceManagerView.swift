@@ -12,18 +12,12 @@ import AppKit
 struct DeviceManagerView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var statusManager: StatusManager
+    @EnvironmentObject var context: DeviceManagerContext
 
     @Query(sort: \PlaylistItem.name) private var allPlaylists: [PlaylistItem]
 
-    @State private var deviceRoot: URL?
-    @State private var config: DeviceConfig = DeviceConfig()
-    @State private var volumeInfo: (total: Int64, free: Int64)?
-    @State private var selectedPlaylists: Set<UUID> = []
+    // We use context for state, but fileImporter needs a binding.
     @State private var showFileImporter = false
-    @State private var isSyncing = false
-
-    // UI Helpers
-    @State private var targetFormat: String = "mp3"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,7 +30,7 @@ struct DeviceManagerView: View {
                 VStack(alignment: .leading) {
                     Text("External Device Manager")
                         .font(.headline)
-                    if let url = deviceRoot {
+                    if let url = context.deviceRoot {
                         Text(url.path)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -61,7 +55,7 @@ struct DeviceManagerView: View {
 
             Divider()
 
-            if let _ = deviceRoot {
+            if let _ = context.deviceRoot {
                 ScrollView {
                     VStack(spacing: 20) {
 
@@ -69,18 +63,20 @@ struct DeviceManagerView: View {
                         GroupBox(label: Label("Device Information", systemImage: "info.circle")) {
                             HStack(alignment: .top, spacing: 20) {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    TextField("Alias", text: $config.alias)
+                                    TextField("Alias", text: $context.config.alias)
                                         .textFieldStyle(.roundedBorder)
+                                        .onChange(of: context.config.alias) { _, _ in context.saveConfig() }
 
-                                    TextField("Description", text: $config.description)
+                                    TextField("Description", text: $context.config.description)
                                         .textFieldStyle(.roundedBorder)
+                                        .onChange(of: context.config.description) { _, _ in context.saveConfig() }
                                 }
                                 .frame(maxWidth: 300)
 
                                 Divider()
 
                                 VStack(alignment: .leading) {
-                                    if let info = volumeInfo {
+                                    if let info = context.volumeInfo {
                                         let totalGB = Double(info.total) / 1_000_000_000
                                         let freeGB = Double(info.free) / 1_000_000_000
                                         let usedGB = totalGB - freeGB
@@ -112,27 +108,27 @@ struct DeviceManagerView: View {
                         // MARK: - Sync Settings
                         GroupBox(label: Label("Configuration", systemImage: "gearshape")) {
                             Form {
-                                Picker("Target Format", selection: $targetFormat) {
+                                Picker("Target Format", selection: $context.targetFormat) {
                                     Text("MP3 (Universal)").tag("mp3")
                                     Text("AAC (M4A)").tag("m4a")
                                     Text("FLAC (Lossless)").tag("flac")
                                 }
-                                .onChange(of: targetFormat) { _, newValue in
+                                .onChange(of: context.targetFormat) { _, newValue in
                                     // Update config supported formats ensuring target is first
-                                    config.supportedFormats = [newValue]
-                                    saveConfig()
+                                    context.config.supportedFormats = [newValue]
+                                    context.saveConfig()
                                 }
 
-                                Toggle("Simple Device Mode (Flat Structure)", isOn: $config.isSimpleDevice)
-                                    .onChange(of: config.isSimpleDevice) { _, _ in saveConfig() }
+                                Toggle("Simple Device Mode (Flat Structure)", isOn: $context.config.isSimpleDevice)
+                                    .onChange(of: context.config.isSimpleDevice) { _, _ in context.saveConfig() }
 
-                                if config.isSimpleDevice {
-                                    Toggle("Randomize Order (0001_Song...)", isOn: $config.randomizeCopy)
+                                if context.config.isSimpleDevice {
+                                    Toggle("Randomize Order (0001_Song...)", isOn: $context.config.randomizeCopy)
                                         .padding(.leading)
-                                        .onChange(of: config.randomizeCopy) { _, _ in saveConfig() }
+                                        .onChange(of: context.config.randomizeCopy) { _, _ in context.saveConfig() }
                                 }
 
-                                Text(config.isSimpleDevice ?
+                                Text(context.config.isSimpleDevice ?
                                      "Files will be placed in the root folder." :
                                      "Files will be organized in folders by Playlist.")
                                 .font(.caption)
@@ -147,12 +143,12 @@ struct DeviceManagerView: View {
                                 ForEach(allPlaylists) { playlist in
                                     HStack {
                                         Toggle(isOn: Binding(
-                                            get: { selectedPlaylists.contains(playlist.id) },
+                                            get: { context.selectedPlaylists.contains(playlist.id) },
                                             set: { isSelected in
                                                 if isSelected {
-                                                    selectedPlaylists.insert(playlist.id)
+                                                    context.selectedPlaylists.insert(playlist.id)
                                                 } else {
-                                                    selectedPlaylists.remove(playlist.id)
+                                                    context.selectedPlaylists.remove(playlist.id)
                                                 }
                                             }
                                         )) {
@@ -168,19 +164,26 @@ struct DeviceManagerView: View {
                         }
 
                         // MARK: - Actions
-                        Button(action: startSync) {
-                            HStack {
-                                if isSyncing {
-                                    ProgressView().controlSize(.small)
-                                }
-                                Text(isSyncing ? "Syncing..." : "Sync Now")
-                                    .bold()
+                        HStack {
+                            Button(action: exportCSV) {
+                                Label("Export CSV List", systemImage: "doc.text")
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding()
+
+                            Spacer()
+
+                            Button(action: startSync) {
+                                HStack {
+                                    if context.isSyncing {
+                                        ProgressView().controlSize(.small)
+                                    }
+                                    Text(context.isSyncing ? "Syncing..." : "Sync Now")
+                                        .bold()
+                                }
+                                .padding(.horizontal)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(context.isSyncing || context.selectedPlaylists.isEmpty)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isSyncing || selectedPlaylists.isEmpty)
                         .padding(.bottom)
 
                     }
@@ -203,7 +206,8 @@ struct DeviceManagerView: View {
             switch result {
             case .success(let urls):
                 if let url = urls.first {
-                    loadDevice(url: url)
+                    context.deviceRoot = url
+                    context.refreshDeviceState()
                 }
             case .failure(let error):
                 statusManager.statusMessage = "Error selecting folder: \(error.localizedDescription)"
@@ -211,38 +215,14 @@ struct DeviceManagerView: View {
         }
     }
 
-    private func loadDevice(url: URL) {
-        self.deviceRoot = url
-
-        // Load Volume Info
-        if let info = DeviceService.shared.getVolumeInfo(url: url) {
-            self.volumeInfo = info
-        }
-
-        // Load Config
-        if let loadedConfig = DeviceService.shared.loadConfig(from: url) {
-            self.config = loadedConfig
-            self.targetFormat = loadedConfig.supportedFormats.first ?? "mp3"
-        } else {
-            // New Config
-            self.config = DeviceConfig()
-            saveConfig()
-        }
-    }
-
-    private func saveConfig() {
-        guard let url = deviceRoot else { return }
-        try? DeviceService.shared.saveConfig(config, to: url)
-    }
-
     private func startSync() {
-        guard let url = deviceRoot else { return }
+        guard let url = context.deviceRoot else { return }
 
-        isSyncing = true
+        context.isSyncing = true
         statusManager.isBusy = true
 
         // 1. Prepare DTOs on MainActor (SwiftData Access)
-        let playlistsToSync = allPlaylists.filter { selectedPlaylists.contains($0.id) }
+        let playlistsToSync = allPlaylists.filter { context.selectedPlaylists.contains($0.id) }
         let playlistDTOs = playlistsToSync.map { playlist in
             PlaylistDTO(
                 id: playlist.id,
@@ -260,35 +240,93 @@ struct DeviceManagerView: View {
         }
 
         // Capture dependencies
-        let currentConfig = self.config
+        let currentConfig = context.config
         let status = self.statusManager
 
         // 2. Offload to background
         Task {
             do {
-                // Task.detached creates a background task.
-                // We await it, which suspends this MainActor task without blocking the thread.
                 try await Task.detached(priority: .userInitiated) {
                     try await DeviceService.shared.sync(playlists: playlistDTOs, to: url, config: currentConfig, status: status)
                 }.value
 
                 // 3. Update UI on completion
-                isSyncing = false
+                context.isSyncing = false
                 statusManager.isBusy = false
-                if let info = DeviceService.shared.getVolumeInfo(url: url) {
-                    self.volumeInfo = info
-                }
+                // Refresh volume info
+                context.refreshDeviceState()
 
             } catch {
-                isSyncing = false
+                context.isSyncing = false
                 statusManager.isBusy = false
                 statusManager.statusMessage = "Sync failed: \(error.localizedDescription)"
             }
         }
     }
-}
 
-#Preview {
-    DeviceManagerView()
-        .environmentObject(StatusManager())
+    private func exportCSV() {
+        guard let deviceRoot = context.deviceRoot else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "Device_Music_List.csv"
+
+        panel.begin { response in
+            if response == .OK, let outputURL = panel.url {
+                generateAndSaveCSV(to: outputURL, deviceRoot: deviceRoot)
+            }
+        }
+    }
+
+    private func generateAndSaveCSV(to outputURL: URL, deviceRoot: URL) {
+        // 1. Load Manifest
+        let manifest = DeviceService.shared.loadManifest(from: deviceRoot)
+
+        // 2. Fetch all songs for lookup
+        let descriptor = FetchDescriptor<SongItem>()
+        let allSongs = (try? modelContext.fetch(descriptor)) ?? []
+        // Use dictionary for O(1) lookup: [SongID String : SongItem]
+        // Note: Grouping by ID to handle potential duplicate IDs (though UUIDs should be unique)
+        let lookup = Dictionary(grouping: allSongs, by: { $0.id.uuidString }).mapValues { $0.first! }
+
+        // 3. Build CSV Content
+        var csvString = "Relative Path,Title,Artist,Album,Duration,Format\n"
+
+        // Sort by path for readability
+        let sortedFiles = manifest.files.sorted(by: { $0.key < $1.key })
+
+        for (path, songID) in sortedFiles {
+            var title = "Unknown (ID: \(songID))"
+            var artist = ""
+            var album = ""
+            var duration = ""
+            var format = ""
+
+            if let song = lookup[songID] {
+                // Escape quotes for CSV
+                title = song.title.replacingOccurrences(of: "\"", with: "\"\"")
+                artist = song.artist.replacingOccurrences(of: "\"", with: "\"\"")
+                album = song.album.replacingOccurrences(of: "\"", with: "\"\"")
+                duration = formatDuration(song.duration)
+                format = song.fileExtension
+            }
+
+            let row = "\"\(path)\",\"\(title)\",\"\(artist)\",\"\(album)\",\"\(duration)\",\"\(format)\"\n"
+            csvString += row
+        }
+
+        // 4. Write to file
+        do {
+            try csvString.write(to: outputURL, atomically: true, encoding: .utf8)
+            statusManager.statusMessage = "CSV Exported successfully."
+        } catch {
+            statusManager.statusMessage = "Failed to export CSV: \(error.localizedDescription)"
+        }
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
+        let minutes = Int(seconds) / 60
+        let seconds = Int(seconds) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
 }

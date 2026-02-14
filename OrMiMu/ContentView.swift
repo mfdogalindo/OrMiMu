@@ -24,6 +24,7 @@ struct ContentView: View {
     @StateObject private var statusManager = StatusManager()
     @StateObject private var audioPlayerManager = AudioPlayerManager()
     @StateObject private var downloadManager = DownloadManager()
+    @StateObject private var deviceManagerContext = DeviceManagerContext()
 
     enum SidebarItem: Hashable, Identifiable {
         case library
@@ -113,6 +114,7 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: 800, minHeight: 600)
 
             // Playing Controls
             if playableSong != nil {
@@ -134,13 +136,15 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
             }
-            .padding(8)
+            .frame(height: 32)
+            .padding(.horizontal, 8)
             .background(Color(NSColor.windowBackgroundColor))
         }
         .navigationTitle(currentTitle)
         .environmentObject(statusManager)
         .environmentObject(audioPlayerManager)
         .environmentObject(downloadManager)
+        .environmentObject(deviceManagerContext)
         .sheet(isPresented: $showSmartPlaylistSheet) {
             SmartPlaylistView()
         }
