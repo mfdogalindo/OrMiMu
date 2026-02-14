@@ -88,7 +88,14 @@ class DeviceService {
 
     /// Syncs playlists to the device using DTOs
     func sync(playlists: [PlaylistDTO], to deviceRoot: URL, config: DeviceConfig, status: StatusManager) async throws {
-        // 1. Load Manifest
+        // Ensure security scope for the entire operation
+        let isSecurityScoped = deviceRoot.startAccessingSecurityScopedResource()
+        defer { if isSecurityScoped { deviceRoot.stopAccessingSecurityScopedResource() } }
+
+        // 1. Load Manifest (we pass url, but loadManifest also does security check.
+        // It's safe to nest calls or we can refactor loadManifest to not check if already accessed.
+        // For simplicity, let loadManifest handle its own scope or rely on this one if file access allows.
+        // The `loadManifest` implementation uses `startAccessingSecurityScopedResource` internally which is fine (nested calls increment ref count).
         var manifest = loadManifest(from: deviceRoot)
 
         // Build Reverse Lookup (ID -> Set<Path>) to find existing paths
@@ -158,6 +165,8 @@ class DeviceService {
 
             // 5. Check Free Space
             if index % 10 == 0 {
+                // We need to re-check volume info here.
+                // Since we are already accessing resource, let's try direct check if possible or call helper.
                 if let info = getVolumeInfo(url: deviceRoot), info.free < 10_000_000 { // < 10MB
                     throw NSError(domain: "OrMiMu", code: 507, userInfo: [NSLocalizedDescriptionKey: "Not enough space on device."])
                 }
