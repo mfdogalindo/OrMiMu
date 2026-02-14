@@ -49,6 +49,10 @@ struct MusicListView: View {
     @State private var editingField: SongField?
     @State private var bulkEditContext: BulkEditContext?
 
+    // New Playlist Creation
+    @State private var showNewPlaylistAlert = false
+    @State private var pendingPlaylistSongs: Set<SongItem.ID> = []
+
     var sortedSongs: [SongItem] {
         return songs.sorted(using: sortOrder)
     }
@@ -149,7 +153,8 @@ struct MusicListView: View {
                         }
                         Divider()
                         Button("New Playlist") {
-                            createNewPlaylist(with: selectedIDs)
+                            pendingPlaylistSongs = selectedIDs
+                            showNewPlaylistAlert = true
                         }
                     }
                 }
@@ -166,6 +171,15 @@ struct MusicListView: View {
         }
         .sheet(item: $bulkEditContext) { context in
             BulkEditMetadataView(songs: context.songs)
+        }
+        .playlistNameAlert(
+            isPresented: $showNewPlaylistAlert,
+            title: "New Playlist",
+            message: "Enter a name for the new playlist.",
+            initialName: "New Playlist"
+        ) { name in
+            createNewPlaylist(name: name, with: pendingPlaylistSongs)
+            pendingPlaylistSongs = []
         }
     }
 
@@ -244,9 +258,9 @@ struct MusicListView: View {
         playlist.songs = existingSongs.filter { !songIDs.contains($0.id) }
     }
 
-    private func createNewPlaylist(with songIDs: Set<SongItem.ID>) {
+    private func createNewPlaylist(name: String, with songIDs: Set<SongItem.ID>) {
         let selectedSongs = sortedSongs.filter { songIDs.contains($0.id) }
-        let newPlaylist = PlaylistItem(name: "New Playlist", songs: selectedSongs)
+        let newPlaylist = PlaylistItem(name: name, songs: selectedSongs)
         modelContext.insert(newPlaylist)
     }
 

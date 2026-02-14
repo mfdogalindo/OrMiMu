@@ -29,6 +29,11 @@
 		BA5614BD2F38FD5C005ED0F0 /* AddFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5614BC2F38FD5C005ED0F0 /* AddFolder.swift */; };
 		BA5614C02F38FD69005ED0F0 /* MetadataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5614BF2F38FD69005ED0F0 /* MetadataService.swift */; };
 		BA5614C22F392E0A005ED0F0 /* ConversionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA5614C12F392E0A005ED0F0 /* ConversionService.swift */; };
+		BAFF01EB2F4013FA003C73AA /* PlaylistAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAFF01EA2F4013FA003C73AA /* PlaylistAlerts.swift */; };
+		BAFF01EC2F4013FA003C73AA /* DeviceManagerContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAFF01E82F4013FA003C73AA /* DeviceManagerContext.swift */; };
+		BAFF01ED2F4013FA003C73AA /* DeviceManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAFF01E92F4013FA003C73AA /* DeviceManagerView.swift */; };
+		BAFF01EF2F40145B003C73AA /* DeviceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAFF01EE2F40145B003C73AA /* DeviceModels.swift */; };
+		BAFF01F12F401462003C73AA /* DeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAFF01F02F401462003C73AA /* DeviceService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,6 +81,11 @@
 		BA5614BC2F38FD5C005ED0F0 /* AddFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFolder.swift; sourceTree = "<group>"; };
 		BA5614BF2F38FD69005ED0F0 /* MetadataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataService.swift; sourceTree = "<group>"; };
 		BA5614C12F392E0A005ED0F0 /* ConversionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversionService.swift; sourceTree = "<group>"; };
+		BAFF01E82F4013FA003C73AA /* DeviceManagerContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceManagerContext.swift; sourceTree = "<group>"; };
+		BAFF01E92F4013FA003C73AA /* DeviceManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceManagerView.swift; sourceTree = "<group>"; };
+		BAFF01EA2F4013FA003C73AA /* PlaylistAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistAlerts.swift; sourceTree = "<group>"; };
+		BAFF01EE2F40145B003C73AA /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
+		BAFF01F02F401462003C73AA /* DeviceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -168,6 +178,7 @@
 		645F89D72B7446E5000F99F0 /* Actions */ = {
 			isa = PBXGroup;
 			children = (
+				BAFF01F02F401462003C73AA /* DeviceService.swift */,
 				BA5614C12F392E0A005ED0F0 /* ConversionService.swift */,
 				BA5614BF2F38FD69005ED0F0 /* MetadataService.swift */,
 				BA5614BC2F38FD5C005ED0F0 /* AddFolder.swift */,
@@ -181,6 +192,7 @@
 		645F89DA2B744E37000F99F0 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				BAFF01EE2F40145B003C73AA /* DeviceModels.swift */,
 				BA4F11872F3981BF00638081 /* DownloadManager.swift */,
 				BA5614B42F38DF64005ED0F0 /* StatusManager.swift */,
 				645F89DB2B744E89000F99F0 /* FilesModels.swift */,
@@ -192,6 +204,9 @@
 		645F89DD2B745A5B000F99F0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				BAFF01E82F4013FA003C73AA /* DeviceManagerContext.swift */,
+				BAFF01E92F4013FA003C73AA /* DeviceManagerView.swift */,
+				BAFF01EA2F4013FA003C73AA /* PlaylistAlerts.swift */,
 				BA4F11892F3981C700638081 /* YouTubeDownloadView.swift */,
 				BA5614B82F38F871005ED0F0 /* SettingsView.swift */,
 				645F89DE2B745A83000F99F0 /* MusicList.swift */,
@@ -342,9 +357,14 @@
 				BA4F118A2F3981C700638081 /* YouTubeDownloadView.swift in Sources */,
 				637A9FC92B7511360080D742 /* Constants.swift in Sources */,
 				645F89D92B74470C000F99F0 /* AddFolder.swift in Sources */,
+				BAFF01EF2F40145B003C73AA /* DeviceModels.swift in Sources */,
 				BA5614B52F38DF64005ED0F0 /* StatusManager.swift in Sources */,
 				637A9FD22B75D5CE0080D742 /* MusicPlayer.swift in Sources */,
+				BAFF01F12F401462003C73AA /* DeviceService.swift in Sources */,
 				645F89DC2B744E89000F99F0 /* FilesModels.swift in Sources */,
+				BAFF01EB2F4013FA003C73AA /* PlaylistAlerts.swift in Sources */,
+				BAFF01EC2F4013FA003C73AA /* DeviceManagerContext.swift in Sources */,
+				BAFF01ED2F4013FA003C73AA /* DeviceManagerView.swift in Sources */,
 				BA5614B92F38F871005ED0F0 /* SettingsView.swift in Sources */,
 				BA5614BD2F38FD5C005ED0F0 /* AddFolder.swift in Sources */,
 			);

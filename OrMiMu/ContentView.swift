@@ -19,15 +19,18 @@ struct ContentView: View {
     @State private var playlistPath = NavigationPath()
     @State private var selectedPlaylist: PlaylistItem?
     @State private var showSmartPlaylistSheet = false
+    @State private var showNewPlaylistAlert = false
 
     @StateObject private var statusManager = StatusManager()
     @StateObject private var audioPlayerManager = AudioPlayerManager()
     @StateObject private var downloadManager = DownloadManager()
+    @StateObject private var deviceManagerContext = DeviceManagerContext()
 
     enum SidebarItem: Hashable, Identifiable {
         case library
         case playlists
         case download
+        case external
 
         var id: Self { self }
 
@@ -36,6 +39,7 @@ struct ContentView: View {
             case .library: return "Library"
             case .playlists: return "Playlists"
             case .download: return "Download"
+            case .external: return "External Devices"
             }
         }
     }
@@ -63,6 +67,11 @@ struct ContentView: View {
                 }
                 .buttonStyle(HeaderButtonStyle(isSelected: selectedTab == .download))
 
+                Button(action: { selectedTab = .external }) {
+                    Label("Devices", systemImage: "externaldrive")
+                }
+                .buttonStyle(HeaderButtonStyle(isSelected: selectedTab == .external))
+
                 Spacer()
 
                 if selectedTab == .library {
@@ -76,7 +85,7 @@ struct ContentView: View {
                      Button(action: { showSmartPlaylistSheet = true }) {
                         Label("Smart Playlist", systemImage: "wand.and.stars")
                     }
-                    Button(action: addPlaylist) {
+                    Button(action: { showNewPlaylistAlert = true }) {
                         Label("Add Playlist", systemImage: "plus")
                     }
                 }
@@ -98,11 +107,14 @@ struct ContentView: View {
                     }
                 case .download:
                     YouTubeDownloadView()
+                case .external:
+                    DeviceManagerView()
                 case .none, .some:
                     Text("Select an item")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: 800, minHeight: 600)
 
             // Playing Controls
             if playableSong != nil {
@@ -124,15 +136,25 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
             }
-            .padding(8)
+            .frame(height: 32)
+            .padding(.horizontal, 8)
             .background(Color(NSColor.windowBackgroundColor))
         }
         .navigationTitle(currentTitle)
         .environmentObject(statusManager)
         .environmentObject(audioPlayerManager)
         .environmentObject(downloadManager)
+        .environmentObject(deviceManagerContext)
         .sheet(isPresented: $showSmartPlaylistSheet) {
             SmartPlaylistView()
+        }
+        .playlistNameAlert(
+            isPresented: $showNewPlaylistAlert,
+            title: "New Playlist",
+            message: "Enter a name for the new playlist.",
+            initialName: "New Playlist"
+        ) { name in
+            addPlaylist(name: name)
         }
     }
 
@@ -160,8 +182,8 @@ struct ContentView: View {
         }
     }
 
-    private func addPlaylist() {
-        let newPlaylist = PlaylistItem(name: "New Playlist")
+    private func addPlaylist(name: String) {
+        let newPlaylist = PlaylistItem(name: name)
         modelContext.insert(newPlaylist)
     }
 }
@@ -187,6 +209,9 @@ struct PlaylistListView: View {
     @Binding var selectedPlaylist: PlaylistItem?
     @Environment(\.modelContext) private var modelContext
 
+    @State private var playlistToRename: PlaylistItem?
+    @State private var showRenameAlert = false
+
     var body: some View {
         List(selection: $selectedPlaylist) {
             ForEach(playlists) { playlist in
@@ -197,13 +222,27 @@ struct PlaylistListView: View {
                     }
                 }
                 .contextMenu {
+                    Button("Rename") {
+                        playlistToRename = playlist
+                        showRenameAlert = true
+                    }
                     Button("Delete") {
                         modelContext.delete(playlist)
                     }
                 }
             }
         }
-        // Removed toolbar and state from here as they are moved to ContentView
+        .playlistNameAlert(
+            isPresented: $showRenameAlert,
+            title: "Rename Playlist",
+            message: "Enter a new name for the playlist.",
+            initialName: playlistToRename?.name ?? ""
+        ) { newName in
+            if let playlist = playlistToRename {
+                playlist.name = newName
+            }
+            playlistToRename = nil
+        }
     }
 }
 
