@@ -74,27 +74,6 @@ struct ContentView: View {
                 .buttonStyle(HeaderButtonStyle(isSelected: selectedTab == .external))
 
                 Spacer()
-
-                if selectedTab == .library {
-                    Button(action: refreshMetadata) {
-                        Label("Update Metadata", systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    Button(action: addFolder) {
-                        Label("Add Folder", systemImage: "folder.badge.plus")
-                    }
-                } else if selectedTab == .playlists {
-                    if !playlistPath.isEmpty && selectedPlaylist != nil {
-                        Button(action: { showSyncSheet = true }) {
-                            Label("Sync", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                    }
-                     Button(action: { showSmartPlaylistSheet = true }) {
-                        Label("Smart Playlist", systemImage: "wand.and.stars")
-                    }
-                    Button(action: { showNewPlaylistAlert = true }) {
-                        Label("Add Playlist", systemImage: "plus")
-                    }
-                }
             }
             .padding()
             .background(Color(NSColor.windowBackgroundColor))
@@ -123,7 +102,34 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .frame(minWidth: 800, minHeight: 600)
+            .frame(minWidth: 900, minHeight: 650)
+            .toolbar {
+                ToolbarItemGroup(placement: .automatic) {
+                    if selectedTab == .library {
+                        Button(action: refreshMetadata) {
+                            Label("Update Metadata", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        Button(action: addFolder) {
+                            Label("Add Folder", systemImage: "folder.badge.plus")
+                        }
+                    } else if selectedTab == .playlists {
+                        if !playlistPath.isEmpty && selectedPlaylist != nil {
+                            Button(action: { showSyncSheet = true }) {
+                                Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                        Button(action: { showSmartPlaylistSheet = true }) {
+                            Label("Smart Playlist", systemImage: "wand.and.stars")
+                        }
+                        Button(action: { showNewPlaylistAlert = true }) {
+                            Label("Add Playlist", systemImage: "plus")
+                        }
+                    } else {
+                        // Maintain toolbar height consistency for other tabs
+                        Spacer()
+                    }
+                }
+            }
 
             // Playing Controls
             if playableSong != nil {
