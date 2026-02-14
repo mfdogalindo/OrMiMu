@@ -44,13 +44,33 @@ struct MusicListView: View {
     @AppStorage("librarySortAscending") private var sortAscending: Bool = true
     @State private var sortOrder = [KeyPathComparator(\SongItem.title)]
 
+    // Search State
+    @State private var searchText = ""
+
     // Metadata Editing State
     @State private var songToEdit: SongItem?
     @State private var editingField: SongField?
     @State private var bulkEditContext: BulkEditContext?
 
+    // New Playlist Creation
+    @State private var showNewPlaylistAlert = false
+    @State private var pendingPlaylistSongs: Set<SongItem.ID> = []
+
+    var filteredSongs: [SongItem] {
+        if searchText.isEmpty {
+            return songs
+        } else {
+            return songs.filter { song in
+                song.title.localizedCaseInsensitiveContains(searchText) ||
+                song.artist.localizedCaseInsensitiveContains(searchText) ||
+                song.album.localizedCaseInsensitiveContains(searchText) ||
+                song.genre.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+
     var sortedSongs: [SongItem] {
-        return songs.sorted(using: sortOrder)
+        return filteredSongs.sorted(using: sortOrder)
     }
 
     var body: some View {
@@ -104,6 +124,7 @@ struct MusicListView: View {
                     }
             }
         }
+        .searchable(text: $searchText, placement: .automatic, prompt: "Search Songs")
         .onChange(of: sortOrder) { _, newOrder in
             saveSortOrder(newOrder)
         }
@@ -149,7 +170,8 @@ struct MusicListView: View {
                         }
                         Divider()
                         Button("New Playlist") {
-                            createNewPlaylist(with: selectedIDs)
+                            pendingPlaylistSongs = selectedIDs
+                            showNewPlaylistAlert = true
                         }
                     }
                 }
@@ -166,6 +188,15 @@ struct MusicListView: View {
         }
         .sheet(item: $bulkEditContext) { context in
             BulkEditMetadataView(songs: context.songs)
+        }
+        .playlistNameAlert(
+            isPresented: $showNewPlaylistAlert,
+            title: "New Playlist",
+            message: "Enter a name for the new playlist.",
+            initialName: "New Playlist"
+        ) { name in
+            createNewPlaylist(name: name, with: pendingPlaylistSongs)
+            pendingPlaylistSongs = []
         }
     }
 
@@ -244,9 +275,9 @@ struct MusicListView: View {
         playlist.songs = existingSongs.filter { !songIDs.contains($0.id) }
     }
 
-    private func createNewPlaylist(with songIDs: Set<SongItem.ID>) {
+    private func createNewPlaylist(name: String, with songIDs: Set<SongItem.ID>) {
         let selectedSongs = sortedSongs.filter { songIDs.contains($0.id) }
-        let newPlaylist = PlaylistItem(name: "New Playlist", songs: selectedSongs)
+        let newPlaylist = PlaylistItem(name: name, songs: selectedSongs)
         modelContext.insert(newPlaylist)
     }
 
