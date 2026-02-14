@@ -92,13 +92,56 @@ class DeviceService {
         let isSecurityScoped = deviceRoot.startAccessingSecurityScopedResource()
         defer { if isSecurityScoped { deviceRoot.stopAccessingSecurityScopedResource() } }
 
-        // 1. Load Manifest (we pass url, but loadManifest also does security check.
-        // It's safe to nest calls or we can refactor loadManifest to not check if already accessed.
-        // For simplicity, let loadManifest handle its own scope or rely on this one if file access allows.
-        // The `loadManifest` implementation uses `startAccessingSecurityScopedResource` internally which is fine (nested calls increment ref count).
         var manifest = loadManifest(from: deviceRoot)
 
-        // Build Reverse Lookup (ID -> Set<Path>) to find existing paths
+        // 1. Handle Playlist Renaming (Complex Mode only)
+        // If not simple mode, we use folders. We need to check if existing playlist IDs have new names.
+        if !config.isSimpleDevice {
+            for playlist in playlists {
+                let playlistID = playlist.id.uuidString
+                let currentName = playlist.name
+
+                // If manifest tracks this ID but name differs
+                if let oldFolderName = manifest.playlists[playlistID], oldFolderName != currentName {
+                    // Rename folder
+                    let oldURL = deviceRoot.appendingPathComponent(oldFolderName)
+                    let newURL = deviceRoot.appendingPathComponent(currentName)
+
+                    if FileManager.default.fileExists(atPath: oldURL.path) {
+                        do {
+                            // If target exists, merge? For now, assume rename if target absent.
+                            // If target present, we might have a conflict or merge scenario.
+                            // Simple rename:
+                            try FileManager.default.moveItem(at: oldURL, to: newURL)
+                            await MainActor.run { status.logOutput += "Renamed playlist folder: \(oldFolderName) -> \(currentName)\n" }
+
+                            // Update Manifest paths that used old folder
+                            // This is expensive O(N) over all files, but necessary to keep manifest valid
+                            var newFiles: [String: String] = [:]
+                            for (path, songID) in manifest.files {
+                                if path.hasPrefix("\(oldFolderName)/") {
+                                    let suffix = path.dropFirst(oldFolderName.count)
+                                    let newPath = "\(currentName)\(suffix)"
+                                    newFiles[newPath] = songID
+                                } else {
+                                    newFiles[path] = songID
+                                }
+                            }
+                            manifest.files = newFiles
+                        } catch {
+                            await MainActor.run { status.logOutput += "Failed to rename playlist folder: \(error.localizedDescription)\n" }
+                        }
+                    }
+                    // Update playlist map regardless
+                    manifest.playlists[playlistID] = currentName
+                } else if manifest.playlists[playlistID] == nil {
+                    // New playlist tracking
+                    manifest.playlists[playlistID] = currentName
+                }
+            }
+        }
+
+        // Build Reverse Lookup (ID -> Set<Path>)
         var existingPathsByID: [String: Set<String>] = [:]
         for (path, id) in manifest.files {
             existingPathsByID[id, default: []].insert(path)
@@ -134,9 +177,15 @@ class DeviceService {
             let playlistName = item.playlistName
 
             // Check cancellation
-            if let _ = status.cancelAction, !status.isBusy {
-                 // Logic to handle cancellation
+            if Task.isCancelled {
+                await MainActor.run { status.statusMessage = "Sync Cancelled" }
+                return
             }
+            // Also check status manager flag if used
+            // But detached task relies on Task cancellation mostly.
+            // If we want manual button cancel from UI:
+            // StatusManager usually has a cancelAction closure that calls process.terminate() or task.cancel()
+            // Here we check isBusy/cancelAction state if applicable, but standard way is Task.checkCancellation
 
             await MainActor.run {
                 status.statusMessage = "Syncing \(index + 1) of \(total): \(song.title)"
@@ -144,29 +193,25 @@ class DeviceService {
             }
 
             // 3. Determine relative path
-            // Check if existing path should be reused (Simple Mode)
             var existingPath: String? = nil
+            // In Simple Mode, reuse path to keep randomization stable
             if config.isSimpleDevice, let paths = existingPathsByID[song.id.uuidString], !paths.isEmpty {
-                // Reuse the first existing path to preserve random prefix
                 existingPath = paths.first
             }
 
             let relativePath = existingPath ?? generateRelativePath(for: song, playlistName: playlistName, config: config)
 
             // 4. Check Manifest & File Existence
-            // Even if existingPath was found, verify file is physically there
             if let existingID = manifest.files[relativePath], existingID == song.id.uuidString {
                 let destURL = deviceRoot.appendingPathComponent(relativePath)
                 if FileManager.default.fileExists(atPath: destURL.path) {
-                    await MainActor.run { status.logOutput += "Skipping (Exists): \(relativePath)\n" }
+                    // Skip copy
                     continue
                 }
             }
 
             // 5. Check Free Space
             if index % 10 == 0 {
-                // We need to re-check volume info here.
-                // Since we are already accessing resource, let's try direct check if possible or call helper.
                 if let info = getVolumeInfo(url: deviceRoot), info.free < 10_000_000 { // < 10MB
                     throw NSError(domain: "OrMiMu", code: 507, userInfo: [NSLocalizedDescriptionKey: "Not enough space on device."])
                 }
@@ -198,9 +243,6 @@ class DeviceService {
         let safeTitle = song.title.replacingOccurrences(of: "/", with: "_")
         let safeArtist = song.artist.replacingOccurrences(of: "/", with: "_")
 
-        // Construct filename: Artist - Title [ID].ext to ensure uniqueness
-        // Or if artist empty: Title [ID].ext
-        // ID snippet avoids collisions for same title.
         let idSnippet = song.id.uuidString.prefix(4)
         let filename: String
 

@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import AppKit
+import UniformTypeIdentifiers
 
 struct DeviceManagerView: View {
     @Environment(\.modelContext) private var modelContext

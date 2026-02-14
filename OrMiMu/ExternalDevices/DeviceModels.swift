@@ -33,8 +33,13 @@ struct DeviceManifest: Codable {
     // Using string for key because file paths are strings
     var files: [String: String]
 
-    init(files: [String: String] = [:]) {
+    // Maps Playlist ID (UUID string) to Folder Name on device
+    // Used to track playlist renaming
+    var playlists: [String: String]
+
+    init(files: [String: String] = [:], playlists: [String: String] = [:]) {
         self.files = files
+        self.playlists = playlists
     }
 }
 
