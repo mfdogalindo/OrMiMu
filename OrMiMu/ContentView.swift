@@ -95,88 +95,91 @@ struct ContentView: View {
                 }
             }
         } detail: {
-            ZStack {
-                if let item = selectedItem {
-                    switch item {
-                    case .library:
-                        MusicListView(songs: allSongs, playableSong: $playableSong)
-                            .toolbar {
-                                ToolbarItemGroup(placement: .primaryAction) {
-                                    Button(action: refreshMetadata) {
-                                        Label("Update Metadata", systemImage: "arrow.triangle.2.circlepath")
-                                            .labelStyle(.titleAndIcon)
-                                    }
-                                    Button(action: addFolder) {
-                                        Label("Add Folder", systemImage: "folder.badge.plus")
-                                            .labelStyle(.titleAndIcon)
-                                    }
-                                }
-                            }
-                    case .playlist(let playlist):
-                        PlaylistDetailView(playlist: playlist, playableSong: $playableSong)
-                            .id(playlist.id) // Force refresh when switching playlists
-                            .toolbar {
-                                ToolbarItemGroup(placement: .primaryAction) {
-                                    Button(action: { showSyncSheet = true }) {
-                                        Label("Sync", systemImage: "arrow.triangle.2.circlepath")
-                                            .labelStyle(.titleAndIcon)
-                                    }
-                                    Button(action: {
-                                        playlistToRename = playlist
-                                        showRenameAlert = true
-                                    }) {
-                                        Label("Rename", systemImage: "pencil")
-                                            .labelStyle(.titleAndIcon)
-                                    }
-                                    Button(role: .destructive, action: {
-                                        modelContext.delete(playlist)
-                                        selectedItem = nil
-                                    }) {
-                                        Label("Delete", systemImage: "trash")
-                                            .labelStyle(.titleAndIcon)
+            VStack(spacing: 0) {
+                ZStack {
+                    if let item = selectedItem {
+                        switch item {
+                        case .library:
+                            MusicListView(songs: allSongs, playableSong: $playableSong)
+                                .toolbar {
+                                    ToolbarItemGroup(placement: .primaryAction) {
+                                        Button(action: refreshMetadata) {
+                                            Label("Update Metadata", systemImage: "arrow.triangle.2.circlepath")
+                                                .labelStyle(.titleAndIcon)
+                                        }
+                                        Button(action: addFolder) {
+                                            Label("Add Folder", systemImage: "folder.badge.plus")
+                                                .labelStyle(.titleAndIcon)
+                                        }
                                     }
                                 }
-                            }
-                    case .download:
-                        YouTubeDownloadView()
-                    case .external:
-                        DeviceManagerView()
+                        case .playlist(let playlist):
+                            PlaylistDetailView(playlist: playlist, playableSong: $playableSong)
+                                .id(playlist.id) // Force refresh when switching playlists
+                                .toolbar {
+                                    ToolbarItemGroup(placement: .primaryAction) {
+                                        Button(action: { showSyncSheet = true }) {
+                                            Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                                                .labelStyle(.titleAndIcon)
+                                        }
+                                        Button(action: {
+                                            playlistToRename = playlist
+                                            showRenameAlert = true
+                                        }) {
+                                            Label("Rename", systemImage: "pencil")
+                                                .labelStyle(.titleAndIcon)
+                                        }
+                                        Button(role: .destructive, action: {
+                                            modelContext.delete(playlist)
+                                            selectedItem = nil
+                                        }) {
+                                            Label("Delete", systemImage: "trash")
+                                                .labelStyle(.titleAndIcon)
+                                        }
+                                    }
+                                }
+                        case .download:
+                            YouTubeDownloadView()
+                        case .external:
+                            DeviceManagerView()
+                        }
+                    } else {
+                        Text("Select an item from the sidebar")
+                            .foregroundStyle(.secondary)
                     }
-                } else {
-                    Text("Select an item from the sidebar")
-                        .foregroundStyle(.secondary)
                 }
-            }
-            .frame(minWidth: 600, minHeight: 400)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: 600, minHeight: 400)
 
-            // Playing Controls - Persistent at bottom of detail view
-            if playableSong != nil {
+                // Playing Controls - Persistent at bottom of detail view
+                if playableSong != nil {
+                    VStack(spacing: 0) {
+                        Divider()
+                        MusicPlayer(playableSong: $playableSong)
+                            .frame(height: 48)
+                            .padding()
+                            .background(Material.bar)
+                    }
+                }
+
+                // Status Bar - Persistent at bottom of detail view
                 VStack(spacing: 0) {
                     Divider()
-                    MusicPlayer(playableSong: $playableSong)
-                        .frame(height: 48)
-                        .padding()
-                        .background(Material.bar)
-                }
-            }
-
-            // Status Bar - Persistent at bottom of detail view
-            VStack(spacing: 0) {
-                Divider()
-                HStack {
-                    if statusManager.isBusy {
-                        ProgressView()
-                            .controlSize(.small)
-                            .scaleEffect(0.8)
+                    HStack {
+                        if statusManager.isBusy {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.8)
+                        }
+                        Text(statusManager.statusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
                     }
-                    Text(statusManager.statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+                    .frame(height: 32)
+                    .padding(.horizontal, 8)
+                    .background(Color(NSColor.windowBackgroundColor))
                 }
-                .frame(height: 32)
-                .padding(.horizontal, 8)
-                .background(Color(NSColor.windowBackgroundColor))
             }
         }
         .frame(minWidth: 900, minHeight: 650)
