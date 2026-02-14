@@ -108,21 +108,26 @@ struct ContentView: View {
                     if selectedTab == .library {
                         Button(action: refreshMetadata) {
                             Label("Update Metadata", systemImage: "arrow.triangle.2.circlepath")
+                                .labelStyle(.titleAndIcon)
                         }
                         Button(action: addFolder) {
                             Label("Add Folder", systemImage: "folder.badge.plus")
+                                .labelStyle(.titleAndIcon)
                         }
                     } else if selectedTab == .playlists {
                         if !playlistPath.isEmpty && selectedPlaylist != nil {
                             Button(action: { showSyncSheet = true }) {
                                 Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                                    .labelStyle(.titleAndIcon)
                             }
                         }
                         Button(action: { showSmartPlaylistSheet = true }) {
                             Label("Smart Playlist", systemImage: "wand.and.stars")
+                                .labelStyle(.titleAndIcon)
                         }
                         Button(action: { showNewPlaylistAlert = true }) {
                             Label("Add Playlist", systemImage: "plus")
+                                .labelStyle(.titleAndIcon)
                         }
                     } else {
                         // Maintain toolbar height consistency for other tabs
