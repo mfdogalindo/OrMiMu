@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var selectedPlaylist: PlaylistItem?
     @State private var showSmartPlaylistSheet = false
     @State private var showNewPlaylistAlert = false
+    @State private var showSyncSheet = false
 
     @StateObject private var statusManager = StatusManager()
     @StateObject private var audioPlayerManager = AudioPlayerManager()
@@ -82,6 +83,11 @@ struct ContentView: View {
                         Label("Add Folder", systemImage: "folder.badge.plus")
                     }
                 } else if selectedTab == .playlists {
+                    if !playlistPath.isEmpty && selectedPlaylist != nil {
+                        Button(action: { showSyncSheet = true }) {
+                            Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                    }
                      Button(action: { showSmartPlaylistSheet = true }) {
                         Label("Smart Playlist", systemImage: "wand.and.stars")
                     }
@@ -103,6 +109,9 @@ struct ContentView: View {
                         PlaylistListView(selectedPlaylist: $selectedPlaylist)
                             .navigationDestination(for: PlaylistItem.self) { playlist in
                                 PlaylistDetailView(playlist: playlist, playableSong: $playableSong)
+                                    .onAppear {
+                                        selectedPlaylist = playlist
+                                    }
                             }
                     }
                 case .download:
@@ -147,6 +156,9 @@ struct ContentView: View {
         .environmentObject(deviceManagerContext)
         .sheet(isPresented: $showSmartPlaylistSheet) {
             SmartPlaylistView()
+        }
+        .sheet(isPresented: $showSyncSheet) {
+            SyncView(songs: selectedPlaylist?.songs ?? [])
         }
         .playlistNameAlert(
             isPresented: $showNewPlaylistAlert,
@@ -271,13 +283,6 @@ struct PlaylistDetailView: View {
             }
         }
         .navigationTitle($playlist.name)
-        .toolbar {
-            ToolbarItem {
-                NavigationLink(destination: SyncView(songs: playlist.songs ?? [])) {
-                    Label("Sync", systemImage: "arrow.triangle.2.circlepath")
-                }
-            }
-        }
     }
 }
 

@@ -44,6 +44,9 @@ struct MusicListView: View {
     @AppStorage("librarySortAscending") private var sortAscending: Bool = true
     @State private var sortOrder = [KeyPathComparator(\SongItem.title)]
 
+    // Search State
+    @State private var searchText = ""
+
     // Metadata Editing State
     @State private var songToEdit: SongItem?
     @State private var editingField: SongField?
@@ -53,8 +56,21 @@ struct MusicListView: View {
     @State private var showNewPlaylistAlert = false
     @State private var pendingPlaylistSongs: Set<SongItem.ID> = []
 
+    var filteredSongs: [SongItem] {
+        if searchText.isEmpty {
+            return songs
+        } else {
+            return songs.filter { song in
+                song.title.localizedCaseInsensitiveContains(searchText) ||
+                song.artist.localizedCaseInsensitiveContains(searchText) ||
+                song.album.localizedCaseInsensitiveContains(searchText) ||
+                song.genre.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+
     var sortedSongs: [SongItem] {
-        return songs.sorted(using: sortOrder)
+        return filteredSongs.sorted(using: sortOrder)
     }
 
     var body: some View {
@@ -108,6 +124,7 @@ struct MusicListView: View {
                     }
             }
         }
+        .searchable(text: $searchText, placement: .automatic, prompt: "Search Songs")
         .onChange(of: sortOrder) { _, newOrder in
             saveSortOrder(newOrder)
         }
